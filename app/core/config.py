@@ -56,6 +56,12 @@ class Settings(BaseSettings):
         "http://localhost:3000,http://localhost:3001,http://localhost:8080",
     )
 
+    # 이미지 프록시 설정
+    image_proxy_allowed_domains: Any = os.getenv(
+        "IMAGE_PROXY_ALLOWED_DOMAINS",
+        "",
+    )
+
     # FCM 설정
     fcm_project_id: str = os.getenv("FCM_PROJECT_ID", "")
     fcm_service_account_json: str = os.getenv("FCM_SERVICE_ACCOUNT_JSON", "")
@@ -79,15 +85,19 @@ class Settings(BaseSettings):
     # 프론트엔드 URL 설정
     frontend_url: str = os.getenv(
         "FRONTEND_URL",
-        "http://localhost:3000"
-        if os.getenv("ENVIRONMENT", "development") == "development"
-        else "https://saegim.seongjunlee.dev",
+        (
+            "http://localhost:3000"
+            if os.getenv("ENVIRONMENT", "development") == "development"
+            else "https://saegim.seongjunlee.dev"
+        ),
     )
     frontend_callback_url: str = os.getenv(
         "FRONTEND_CALLBACK_URL",
-        "http://localhost:3000/auth/callback"
-        if os.getenv("ENVIRONMENT", "development") == "development"
-        else "https://saegim.seongjunlee.dev/auth/callback",
+        (
+            "http://localhost:3000/auth/callback"
+            if os.getenv("ENVIRONMENT", "development") == "development"
+            else "https://saegim.seongjunlee.dev/auth/callback"
+        ),
     )
 
     # 이메일 설정
@@ -130,6 +140,14 @@ class Settings(BaseSettings):
             return [item.strip() for item in v.split(",") if item.strip()]
         return v if isinstance(v, list) else []
 
+    @field_validator("image_proxy_allowed_domains", mode="before")
+    @classmethod
+    def parse_image_proxy_allowed_domains(cls, v):
+        """IMAGE_PROXY_ALLOWED_DOMAINS 환경변수를 리스트로 파싱"""
+        if isinstance(v, str):
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v if isinstance(v, list) else []
+
     @property
     def is_development(self) -> bool:
         """개발 환경인지 확인"""
@@ -145,6 +163,12 @@ class Settings(BaseSettings):
         """CORS origins 반환"""
         # allowed_hosts가 field_validator로 처리되어 항상 list 타입임
         return cast(list[str], self.allowed_hosts)
+
+    @property
+    def image_proxy_domains(self) -> list[str]:
+        """이미지 프록시 허용 도메인 반환"""
+        # image_proxy_allowed_domains가 field_validator로 처리되어 항상 list 타입임
+        return cast(list[str], self.image_proxy_allowed_domains)
 
     model_config = {"env_file": ".env", "case_sensitive": False, "extra": "ignore"}
 

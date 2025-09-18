@@ -8,6 +8,8 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import Response
 
+from app.core.config import get_settings
+
 router = APIRouter(tags=["Public"])
 
 
@@ -17,7 +19,8 @@ async def image_proxy(url: str = Query(..., description="프록시할 이미지 
 
     try:
         # 보안을 위해 허용된 도메인만 프록시
-        allowed_domains = ["storage.aicc-project.com", "aicc-project.com"]
+        settings = get_settings()
+        allowed_domains = settings.image_proxy_domains
 
         parsed_url = urlparse(url)
         if parsed_url.hostname not in allowed_domains:
