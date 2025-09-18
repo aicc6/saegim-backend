@@ -83,22 +83,8 @@ class Settings(BaseSettings):
     )
 
     # 프론트엔드 URL 설정
-    frontend_url: str = os.getenv(
-        "FRONTEND_URL",
-        (
-            "http://localhost:3000"
-            if os.getenv("ENVIRONMENT", "development") == "development"
-            else "https://saegim.seongjunlee.dev"
-        ),
-    )
-    frontend_callback_url: str = os.getenv(
-        "FRONTEND_CALLBACK_URL",
-        (
-            "http://localhost:3000/auth/callback"
-            if os.getenv("ENVIRONMENT", "development") == "development"
-            else "https://saegim.seongjunlee.dev/auth/callback"
-        ),
-    )
+    frontend_url: str = os.getenv("FRONTEND_URL", "")
+    frontend_callback_url: str = os.getenv("FRONTEND_CALLBACK_URL", "")
 
     # 이메일 설정
     smtp_server: str = os.getenv("SMTP_SERVER", "smtp.gmail.com")
