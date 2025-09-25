@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     google_userinfo_uri: str = os.getenv(
         "GOOGLE_USERINFO_URI", "https://www.googleapis.com/oauth2/v2/userinfo"
     )
+    google_android_client_ids: Any = os.getenv("GOOGLE_ANDROID_CLIENT_IDS", "")
 
     # 프론트엔드 URL 설정
     frontend_url: str = os.getenv("FRONTEND_URL", "")
@@ -134,6 +135,14 @@ class Settings(BaseSettings):
             return [item.strip() for item in v.split(",") if item.strip()]
         return v if isinstance(v, list) else []
 
+    @field_validator("google_android_client_ids", mode="before")
+    @classmethod
+    def parse_google_android_client_ids(cls, v):
+        """안드로이드용 구글 클라이언트 ID 목록 파싱"""
+        if isinstance(v, str):
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v if isinstance(v, list) else []
+
     @property
     def is_development(self) -> bool:
         """개발 환경인지 확인"""
@@ -155,6 +164,18 @@ class Settings(BaseSettings):
         """이미지 프록시 허용 도메인 반환"""
         # image_proxy_allowed_domains가 field_validator로 처리되어 항상 list 타입임
         return cast(list[str], self.image_proxy_allowed_domains)
+
+    @property
+    def google_allowed_audiences(self) -> list[str]:
+        """구글 ID 토큰 검증 시 허용할 클라이언트 ID 목록"""
+        audiences: set[str] = set()
+        if self.google_client_id:
+            audiences.add(self.google_client_id)
+        if isinstance(self.google_android_client_ids, list):
+            for client_id in self.google_android_client_ids:
+                if client_id:
+                    audiences.add(client_id)
+        return list(audiences)
 
     model_config = {"env_file": ".env", "case_sensitive": False, "extra": "ignore"}
 

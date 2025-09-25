@@ -10,7 +10,16 @@ from typing import Any, Dict, Optional
 from uuid import uuid4
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, File, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+    File,
+    UploadFile,
+)
 from fastapi.responses import JSONResponse
 from jose.exceptions import JWTError
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -39,6 +48,8 @@ from app.utils.minio_upload import upload_image_with_thumbnail_to_minio
 from app.utils.validators import validate_image_file
 
 from app.utils.error_handlers import StandardHTTPException, unauthorized_exception
+from app.services.google_id_token_service import GoogleIdTokenService
+
 
 router = APIRouter(tags=["Authentication"])
 
@@ -146,6 +157,7 @@ class ChangePasswordRequest(BaseModel):
             raise ValueError("현재 비밀번호는 유효한 문자열이어야 합니다")
 
         return v
+
 
 # 비밀번호 확인 전용 모델
 class VerifyPasswordRequest(BaseModel):
@@ -438,12 +450,18 @@ async def logout(
                 "logout_time": datetime.now(timezone.utc).isoformat(),
                 "user_id": str(current_user_id) if current_user_id else None,
                 "account_type": user.account_type if user else None,
-                "provider": user.provider
-                if user and user.account_type == AccountType.SOCIAL.value
-                else None,
+                "provider": (
+                    user.provider
+                    if user and user.account_type == AccountType.SOCIAL.value
+                    else None
+                ),
                 "errors": error_details if error_details else None,
             },
-            message="로그아웃이 완료되었습니다" if success else "로그아웃이 완료되었습니다 (구글 세션 정리 실패)",
+            message=(
+                "로그아웃이 완료되었습니다"
+                if success
+                else "로그아웃이 완료되었습니다 (구글 세션 정리 실패)"
+            ),
         )
 
     except HTTPException:
@@ -565,12 +583,14 @@ async def get_current_user_info(
             "account_type": current_user.account_type,
             "provider": current_user.provider,
             "is_active": current_user.is_active,
-            "created_at": current_user.created_at.isoformat()
-            if current_user.created_at
-            else None,
+            "created_at": (
+                current_user.created_at.isoformat() if current_user.created_at else None
+            ),
         }
 
-        return BaseResponse(data=user_data, message="현재 사용자 정보를 성공적으로 조회했습니다.")
+        return BaseResponse(
+            data=user_data, message="현재 사용자 정보를 성공적으로 조회했습니다."
+        )
 
     except HTTPException:
         raise
@@ -626,7 +646,9 @@ async def update_user_profile(
 
 
 # === 프로필 이미지 업로드 엔드포인트 ===
-@authenticated_router.post("/profile/upload-image", response_model=BaseResponse[Dict[str, Any]])
+@authenticated_router.post(
+    "/profile/upload-image", response_model=BaseResponse[Dict[str, Any]]
+)
 async def upload_profile_image(
     *,
     current_user: User = Depends(get_current_user),
@@ -637,19 +659,23 @@ async def upload_profile_image(
     try:
         # 이미지 파일 검증
         validate_image_file(image.content_type, image.size)
-        
+
         # MinIO에 이미지와 썸네일 업로드
-        file_id, original_url, thumbnail_url = await upload_image_with_thumbnail_to_minio(image)
-        
+        file_id, original_url, thumbnail_url = (
+            await upload_image_with_thumbnail_to_minio(image)
+        )
+
         # 사용자 프로필에 이미지 URL 저장 (썸네일 사용)
         current_user.profile_image_url = thumbnail_url
         current_user.updated_at = datetime.now(timezone.utc)
-        
+
         db.commit()
         db.refresh(current_user)
-        
-        logger.info(f"프로필 이미지 업로드 성공: {current_user.email} -> {thumbnail_url}")
-        
+
+        logger.info(
+            f"프로필 이미지 업로드 성공: {current_user.email} -> {thumbnail_url}"
+        )
+
         return BaseResponse(
             data={
                 "image_url": thumbnail_url,
@@ -659,7 +685,7 @@ async def upload_profile_image(
             },
             message="프로필 이미지가 성공적으로 업로드되었습니다.",
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -682,7 +708,9 @@ class EmailChangeWithTokenRequest(BaseModel):
     token: str  # 이메일 인증 토큰
 
 
-@authenticated_router.post("/change-email/send-verification", response_model=BaseResponse[Dict[str, str]])
+@authenticated_router.post(
+    "/change-email/send-verification", response_model=BaseResponse[Dict[str, str]]
+)
 async def send_email_change_verification(
     request: EmailVerificationRequest,
     current_user: User = Depends(get_current_user),
@@ -825,7 +853,9 @@ async def verify_email_change_token(
         )
 
 
-@authenticated_router.post("/change-email/verify-password", response_model=BaseResponse[Dict[str, str]])
+@authenticated_router.post(
+    "/change-email/verify-password", response_model=BaseResponse[Dict[str, str]]
+)
 async def verify_password_and_change_email(
     request: EmailChangeWithTokenRequest,
     current_user: User = Depends(get_current_user),
@@ -950,7 +980,7 @@ async def withdraw_account(
             ):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="비밀번호가 올바르지 않습니다."
+                    detail="비밀번호가 올바르지 않습니다.",
                 )
 
         # 2. 탈퇴 처리
@@ -972,11 +1002,23 @@ async def withdraw_account(
 
         # 5. 관련 데이터 Hard Delete
         db.execute(delete(FCMToken).where(FCMToken.user_id == current_user.id))
-        db.execute(delete(NotificationSettings).where(NotificationSettings.user_id == current_user.id))
-        db.execute(delete(NotificationHistory).where(NotificationHistory.user_id == current_user.id))
+        db.execute(
+            delete(NotificationSettings).where(
+                NotificationSettings.user_id == current_user.id
+            )
+        )
+        db.execute(
+            delete(NotificationHistory).where(
+                NotificationHistory.user_id == current_user.id
+            )
+        )
         db.execute(delete(Notification).where(Notification.user_id == current_user.id))
         db.execute(delete(OAuthToken).where(OAuthToken.user_id == current_user.id))
-        db.execute(delete(EmailVerification).where(EmailVerification.email == current_user.email))
+        db.execute(
+            delete(EmailVerification).where(
+                EmailVerification.email == current_user.email
+            )
+        )
 
         db.commit()
 
@@ -1091,7 +1133,10 @@ def _clear_auth_cookies(response: Response):
 # 비밀번호 재설정 관련 엔드포인트
 # =============================================================================
 
-@router.post("/forgot-password", response_model=BaseResponse[PasswordResetEmailResponse])
+
+@router.post(
+    "/forgot-password", response_model=BaseResponse[PasswordResetEmailResponse]
+)
 async def send_password_reset_email(
     request: PasswordResetEmailRequest,
     db: Session = Depends(get_session),
@@ -1357,7 +1402,10 @@ async def reset_password(
 # 비밀번호 변경 관련 엔드포인트
 # =============================================================================
 
-@authenticated_router.post("/change-password", response_model=BaseResponse[Dict[str, str]])
+
+@authenticated_router.post(
+    "/change-password", response_model=BaseResponse[Dict[str, str]]
+)
 async def change_password(
     request: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
@@ -1382,9 +1430,10 @@ async def change_password(
                 detail="소셜 계정 사용자는 비밀번호 변경이 불가능합니다.",
             )
 
-
         # 현재 비밀번호 확인
-        if not password_hasher.verify_password(request.current_password, current_user.password_hash):
+        if not password_hasher.verify_password(
+            request.current_password, current_user.password_hash
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="현재 비밀번호가 올바르지 않습니다.",
@@ -1411,7 +1460,9 @@ async def change_password(
         )
 
 
-@authenticated_router.post("/verify-password", response_model=BaseResponse[Dict[str, str]])
+@authenticated_router.post(
+    "/verify-password", response_model=BaseResponse[Dict[str, str]]
+)
 async def verify_password(
     request: VerifyPasswordRequest,
     current_user: User = Depends(get_current_user),
@@ -1437,7 +1488,9 @@ async def verify_password(
             )
 
         # 현재 비밀번호 확인
-        if not password_hasher.verify_password(request.current_password, current_user.password_hash):
+        if not password_hasher.verify_password(
+            request.current_password, current_user.password_hash
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="현재 비밀번호가 올바르지 않습니다.",
@@ -1462,6 +1515,7 @@ async def verify_password(
 # 계정 복구 관련 엔드포인트
 # =============================================================================
 
+
 @router.post("/restore/send-restore-email", response_model=BaseResponse[Dict[str, str]])
 async def send_restore_email(
     request: SendRestoreEmailRequest,
@@ -1480,8 +1534,7 @@ async def send_restore_email(
     try:
         # 1. 탈퇴된 사용자 확인
         stmt = select(User).where(
-            User.email == request.email,
-            User.deleted_at.is_not(None)
+            User.email == request.email, User.deleted_at.is_not(None)
         )
         result = db.execute(stmt)
         user = result.scalar_one_or_none()
@@ -1489,7 +1542,7 @@ async def send_restore_email(
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="탈퇴된 계정을 찾을 수 없습니다."
+                detail="탈퇴된 계정을 찾을 수 없습니다.",
             )
 
         # 2. 30일 이내인지 확인
@@ -1515,6 +1568,7 @@ async def send_restore_email(
 
         # 3. 인증 코드 생성 (6자리 숫자)
         import random
+
         verification_code = str(random.randint(100000, 999999))
 
         # 4. 기존 인증 코드가 있다면 만료 처리
@@ -1557,7 +1611,9 @@ async def send_restore_email(
                 detail="복구 이메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.",
             )
 
-        logger.info(f"복구 이메일 발송 성공: {request.email} (인증코드: {verification_code})")
+        logger.info(
+            f"복구 이메일 발송 성공: {request.email} (인증코드: {verification_code})"
+        )
 
         return BaseResponse(
             success=True,
@@ -1594,8 +1650,7 @@ async def restore_account(
     try:
         # 1. 탈퇴된 사용자 조회
         stmt = select(User).where(
-            User.email == request.email,
-            User.deleted_at.is_not(None)
+            User.email == request.email, User.deleted_at.is_not(None)
         )
         result = db.execute(stmt)
         user = result.scalar_one_or_none()
@@ -1603,7 +1658,7 @@ async def restore_account(
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="탈퇴된 계정을 찾을 수 없습니다."
+                detail="탈퇴된 계정을 찾을 수 없습니다.",
             )
 
         # 2. 30일 이내인지 확인
@@ -1641,7 +1696,7 @@ async def restore_account(
         if not verification:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="유효하지 않은 인증 코드입니다."
+                detail="유효하지 않은 인증 코드입니다.",
             )
 
         # 4. 인증 코드 사용 처리
@@ -1669,7 +1724,9 @@ async def restore_account(
 
         # 8. 응답 생성
         account_type_message = (
-            "이메일 계정" if user.account_type == AccountType.EMAIL.value else "소셜 계정"
+            "이메일 계정"
+            if user.account_type == AccountType.EMAIL.value
+            else "소셜 계정"
         )
         response_data = RestoreResponse(
             message=f"{account_type_message}이 성공적으로 복구되었습니다.",
@@ -1696,4 +1753,60 @@ async def restore_account(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="계정 복구 중 오류가 발생했습니다.",
+        )
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str = Field(min_length=10)
+    email: EmailStr
+    display_name: Optional[str] = Field(default=None, max_length=100)
+    photo_url: Optional[str] = Field(default=None, max_length=500)
+
+    @field_validator("id_token")
+    @classmethod
+    def validate_id_token(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("유효한 Google ID 토큰이 필요합니다.")
+        return value
+
+@router.post("/google-login", response_model=BaseResponse[LoginResponse])
+async def google_login_with_id_token(
+    request: GoogleLoginRequest,
+    db: Session = Depends(get_session),
+) -> JSONResponse:
+    """Google ID 토큰을 이용한 모바일 로그인 엔드포인트"""
+
+    try:
+        service = GoogleIdTokenService(db)
+        user = await service.authenticate(request)
+
+        access_token = create_access_token({"sub": str(user.id)})
+        refresh_token = create_refresh_token({"sub": str(user.id)})
+
+        response_data = LoginResponse(
+            user_id=str(user.id),
+            email=user.email,
+            nickname=user.nickname,
+            message="구글 로그인이 완료되었습니다.",
+        )
+
+        response = JSONResponse(
+            content={
+                "success": True,
+                "message": "구글 로그인이 성공적으로 완료되었습니다.",
+                "data": response_data.model_dump(),
+            }
+        )
+        _set_auth_cookies(response, access_token, refresh_token)
+
+        return response
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"구글 로그인 처리 중 오류: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="구글 로그인 처리 중 오류가 발생했습니다.",
         )
