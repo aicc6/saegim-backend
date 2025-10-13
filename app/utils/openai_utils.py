@@ -409,3 +409,26 @@ async def simple_async_chat(
         messages, model=model, temperature=temperature
     )
     return response["content"]
+
+
+async def handwriting_ocr_from_url(image_url: str) -> str:
+    """
+    GPT-4o Vision으로 이미지 URL의 손글씨를 OCR(텍스트 추출)합니다.
+    """
+    client = get_openai_client()
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "이 손글씨 이미지에 적힌 모든 문장을 가능한 한 빠짐없이 추출해서 그대로 반환해 주세요."},
+                {"type": "image_url", "image_url": {"url": image_url}}
+            ]
+        }
+    ]
+    response = await client.async_chat_completion(
+        messages,
+        model="gpt-4o",  # Vision 인식 지원 모델명
+        temperature=0.0,
+        max_completion_tokens=2048
+    )
+    return response["content"]

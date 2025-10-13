@@ -16,9 +16,11 @@ from fastapi import (
     Query,
     UploadFile,
     status,
+    Body,
 )
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
 
 from app.constants import SortOrder
 from app.core.deps import get_current_user_id
@@ -42,10 +44,52 @@ from app.utils.validators import (
     validate_image_file,
     validate_uuid,
 )
+from app.utils.openai_utils import handwriting_ocr_from_url
+from app.services.ai_log import AIService
+from app.schemas.create_diary import CreateDiaryRequest
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Diary"])
+
+
+class HandwritingToDiaryRequest(BaseModel):
+    image_url: str = Field(..., description="손글씨 이미지의 원본 URL (MinIO 업로드 결과)")
+    style: str = Field("short_story", description="글쓰기 스타일 (short_story, poem 등)")
+    length: str = Field("medium", description="문단 길이 (short, medium, long)")
+    # 추후 감정 등 추가 가능
+    uploaded_images: list[dict] | None = Field(None, description="함께 저장할 이미지정보(옵션)")
+
+@router.post("/handwriting/to-diary", response_model=BaseResponse[DiaryResponse])
+async def handwriting_to_diary(
+    *,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    body: HandwritingToDiaryRequest = Body(...)
+) -> BaseResponse[DiaryResponse]:
+    """
+    손글씨 이미지 URL 전달 시, OCR(텍스트추출)+AI 다이어리 자동생성까지 모두 처리
+    """
+    # OCR - 손글씨 텍스트 추출
+    ocr_text = await handwriting_ocr_from_url(body.image_url)
+    if not ocr_text or len(ocr_text.strip()) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="손글씨 이미지에서 글씨를 인식하지 못했습니다. 이미지를 다시 확인해 주세요.")
+
+    # AI 다이어리 자동 요청
+    ai_service = AIService(session)
+    diary_req = CreateDiaryRequest(
+        prompt=ocr_text,
+        style=body.style,
+        length=body.length,
+        uploaded_images=body.uploaded_images if body.uploaded_images else [
+            {"original_url": body.image_url, "thumbnail_url": None, "mime_type": None, "file_size": None}
+        ]
+    )
+    created_diary = ai_service.create_diary(diary_req, user_id)
+
+    return BaseResponse(data=DiaryResponse.model_validate(created_diary), message="손글씨 인식 후 다이어리 생성 완료")
 
 
 @router.get("", response_model=BaseResponse[list[DiaryListResponse]])
@@ -372,6 +416,43 @@ async def upload_temporary_images(
         data=uploaded_images,
         message=f"이미지 업로드 성공 (총 {len(uploaded_images)}개)",
     )
+
+
+@router.post("/handwriting/upload", response_model=BaseResponse[dict])
+async def upload_handwriting_image(
+    *,
+    user_id: Annotated[UUID, Depends(get_current_user_id)],
+    image: Annotated[UploadFile, File(description="손글씨 이미지 파일")],
+) -> BaseResponse[dict]:
+    """
+    손글씨 텍스트 인식용 임시 이미지 업로드 (AI 다이어리 자동생성 본문으로 활용)
+    """
+    try:
+        validate_image_file(image.content_type, image.size or 0)
+        (
+            file_id,
+            original_url,
+            thumbnail_url,
+        ) = await upload_image_with_thumbnail_to_minio(image)
+        return BaseResponse(
+            data={
+                "file_id": file_id,
+                "original_url": original_url,
+                "thumbnail_url": thumbnail_url,
+                "mime_type": image.content_type,
+                "file_size": image.size,
+                "filename": image.filename,
+            },
+            message="손글씨 이미지 업로드 성공 (다음: 텍스트 추출 단계)"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"손글씨 이미지 업로드 실패: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"손글씨 이미지 업로드 오류: {str(e)}",
+        )
 
 
 @router.post("", response_model=BaseResponse[DiaryResponse])
