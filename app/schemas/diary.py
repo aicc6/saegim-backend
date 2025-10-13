@@ -132,6 +132,7 @@ class DiaryUpdateRequest(BaseModel):
     ai_generated_text: str | None = None
     user_emotion: str | None = None
     keywords: list[str] | None = None
+    diary_date: date | None = None
 
     @field_validator("keywords", mode="before")
     @classmethod
