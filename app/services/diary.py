@@ -158,6 +158,7 @@ class DiaryService(BaseService):
             # 새 다이어리 엔트리 생성 (실제 AI 데이터 사용)
             new_diary = DiaryEntry(
                 user_id=user_id,
+                title=diary_create.title,
                 content=diary_create.content,
                 user_emotion=diary_create.user_emotion,
                 ai_emotion=diary_create.ai_emotion,

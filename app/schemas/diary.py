@@ -95,6 +95,7 @@ class DiaryListResponse(BaseModel):
 class DiaryCreateRequest(BaseModel):
     """다이어리 생성 요청 스키마"""
 
+    title: str | None = Field(None, description="다이어리 제목")
     content: str = Field(
         ..., min_length=1, description="다이어리 내용 (사용자 원본 프롬프트)"
     )
