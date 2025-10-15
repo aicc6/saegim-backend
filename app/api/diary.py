@@ -60,7 +60,7 @@ class HandwritingToDiaryRequest(BaseModel):
     image_url: str = Field(..., description="손글씨 이미지의 원본 URL (MinIO 업로드 결과)")
     style: str = Field("short_story", description="글쓰기 스타일 (short_story, poem 등)")
     length: str = Field("medium", description="문단 길이 (short, medium, long)")
-    # 추후 감정 등 추가 가능
+    user_emotion: str | None = Field(None, description="사용자가 선택한 감정 (happy, sad, angry, peaceful, unrest)")
     uploaded_images: list[dict] | None = Field(None, description="함께 저장할 이미지정보(옵션)")
 
 @router.post("/handwriting/to-diary", response_model=BaseResponse[DiaryResponse])
@@ -116,10 +116,10 @@ async def handwriting_to_diary(
         diary_req = DiaryCreateRequest(
             title=None,  # AI가 자동 생성
             content=ai_generated_text,  # AI가 생성한 다이어리 텍스트
-            user_emotion=None,
+            user_emotion=body.user_emotion,  # 사용자가 선택한 감정
             ai_generated_text=ai_generated_text,  # AI가 생성한 텍스트
             ocr_text=ocr_text,  # OCR 원본 텍스트
-            ai_emotion=ai_emotion,
+            ai_emotion=ai_emotion,  # AI가 분석한 감정
             ai_emotion_confidence=None,
             keywords=keywords,
             diary_date=None,
@@ -128,7 +128,7 @@ async def handwriting_to_diary(
             ]
         )
 
-        logger.info("다이어리 저장 시작")
+        logger.info(f"다이어리 저장 시작 - user_emotion: {body.user_emotion}, ai_emotion: {ai_emotion}")
         created_diary = diary_service.create_diary(diary_req, user_id)
         logger.info(f"다이어리 저장 완료 - diary_id: {created_diary.id}")
 
