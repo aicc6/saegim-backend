@@ -46,6 +46,7 @@ from app.utils.validators import (
 )
 from app.utils.openai_utils import handwriting_ocr_from_url
 from app.schemas.diary import DiaryCreateRequest
+from app.services.ai_log import AIService
 
 from fastapi import Body
 from pydantic import BaseModel, Field
@@ -84,26 +85,52 @@ async def handwriting_to_diary(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="손글씨 이미지에서 글씨를 인식하지 못했습니다. 이미지를 다시 확인해 주세요.")
 
-        # AI 다이어리 자동 요청 - DiaryService 사용
+        # AI 서비스로 OCR 텍스트를 다이어리로 변환
+        ai_service = AIService(session)
+
+        # AI 텍스트 생성 (비동기)
+        logger.info("AI 다이어리 텍스트 생성 시작")
+        generated_text = ""
+        async for text_chunk in ai_service._stream_complete_analysis(ocr_text, body.style, body.length):
+            if isinstance(text_chunk, dict) and "tokens_used" in text_chunk:
+                continue
+            generated_text += text_chunk
+
+        # AI 생성된 텍스트 정리
+        ai_generated_text = generated_text.strip()
+        logger.info(f"AI 다이어리 텍스트 생성 완료: {ai_generated_text[:100]}...")
+
+        # 감정 분석 및 키워드 추출
+        try:
+            analysis_result = await ai_service._integrated_analysis(ocr_text, body.style, body.length)
+            ai_emotion = analysis_result["emotion"]
+            keywords = analysis_result["keywords"]
+            logger.info(f"감정 분석 완료: emotion='{ai_emotion}', keywords={keywords}")
+        except Exception as e:
+            logger.warning(f"감정 분석 실패: {str(e)}")
+            ai_emotion = None
+            keywords = None
+
+        # 다이어리 생성 - DiaryService 사용
         diary_service = DiaryService(session)
         diary_req = DiaryCreateRequest(
             title=None,  # AI가 자동 생성
-            content=ocr_text,  # OCR로 추출된 원본 텍스트
+            content=ai_generated_text,  # AI가 생성한 다이어리 텍스트
             user_emotion=None,
-            ai_generated_text=None,  # AI가 생성할 텍스트
-            ocr_text=ocr_text,  # OCR 텍스트를 별도 필드로도 저장
-            ai_emotion=None,
+            ai_generated_text=ai_generated_text,  # AI가 생성한 텍스트
+            ocr_text=ocr_text,  # OCR 원본 텍스트
+            ai_emotion=ai_emotion,
             ai_emotion_confidence=None,
-            keywords=None,
+            keywords=keywords,
             diary_date=None,
             uploaded_images=body.uploaded_images if body.uploaded_images else [
                 {"original_url": body.image_url, "thumbnail_url": None, "mime_type": None, "file_size": None}
             ]
         )
 
-        logger.info("다이어리 생성 시작")
+        logger.info("다이어리 저장 시작")
         created_diary = diary_service.create_diary(diary_req, user_id)
-        logger.info(f"다이어리 생성 완료 - diary_id: {created_diary.id}")
+        logger.info(f"다이어리 저장 완료 - diary_id: {created_diary.id}")
 
         return BaseResponse(data=DiaryResponse.model_validate(created_diary), message="손글씨 인식 후 다이어리 생성 완료")
 
