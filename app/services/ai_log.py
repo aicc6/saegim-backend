@@ -65,6 +65,19 @@ class AIService(BaseService):
 
         self._openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+        # 한국어 감정을 영어로 변환하는 매핑
+        self.emotion_mapping = {
+            "행복": "happy",
+            "슬픔": "sad",
+            "화남": "angry",
+            "평온": "peaceful",
+            "불안": "unrest"
+        }
+
+    def _convert_emotion_to_english(self, korean_emotion: str) -> str:
+        """한국어 감정을 영어로 변환"""
+        return self.emotion_mapping.get(korean_emotion, "peaceful")
+
     @property
     def session(self) -> Session:
         """타입 안전한 세션 접근"""
@@ -641,7 +654,7 @@ class AIService(BaseService):
         anger_matches = [keyword for keyword in anger_keywords if keyword in text_lower]
         if anger_matches:
             logger.info(f"화남 키워드 매칭: {anger_matches}")
-            return "화남"
+            return "angry"
 
             # 슬픔 키워드
         sadness_keywords = [
@@ -659,7 +672,7 @@ class AIService(BaseService):
         ]
         if sadness_matches:
             logger.info(f"슬픔 키워드 매칭: {sadness_matches}")
-            return "슬픔"
+            return "sad"
 
         # 불안 키워드
         anxiety_keywords = [
@@ -678,7 +691,7 @@ class AIService(BaseService):
         ]
         if anxiety_matches:
             logger.info(f"불안 키워드 매칭: {anxiety_matches}")
-            return "불안"
+            return "unrest"
 
         # 행복 키워드
         happiness_keywords = [
@@ -696,7 +709,7 @@ class AIService(BaseService):
         ]
         if happiness_matches:
             logger.info(f"행복 키워드 매칭: {happiness_matches}")
-            return "행복"
+            return "happy"
 
         # 평온 키워드
         peaceful_keywords = [
@@ -713,11 +726,11 @@ class AIService(BaseService):
         ]
         if peaceful_matches:
             logger.info(f"평온 키워드 매칭: {peaceful_matches}")
-            return "평온"
+            return "peaceful"
 
         # 기본값: 평온
-        logger.info("키워드 매칭 없음, 기본값 평온 반환")
-        return "평온"
+        logger.info("키워드 매칭 없음, 기본값 peaceful 반환")
+        return "peaceful"
 
     def _has_strong_emotion_keywords(self, text: str) -> bool:
         """강한 감정 키워드가 있는지 확인"""
@@ -848,6 +861,10 @@ class AIService(BaseService):
                                 )
                                 emotion = "평온"
 
+                            # 한국어 감정을 영어로 변환
+                            english_emotion = self._convert_emotion_to_english(emotion)
+                            logger.info(f"감정 변환: {emotion} -> {english_emotion}")
+
                             # 키워드 검증 및 정리
                             if isinstance(keywords, list):
                                 keywords = [
@@ -862,9 +879,9 @@ class AIService(BaseService):
                                 keywords = prompt.split()[:3] if prompt else ["감정"]
 
                             logger.info(
-                                f"통합 분석 완료: emotion={emotion}, keywords={keywords}"
+                                f"통합 분석 완료: emotion={emotion}->{english_emotion}, keywords={keywords}"
                             )
-                            return {"emotion": emotion, "keywords": keywords}
+                            return {"emotion": english_emotion, "keywords": keywords}  # 영어 감정 반환
 
                         else:
                             raise ValueError("응답에 필수 필드가 없습니다")
@@ -903,5 +920,7 @@ class AIService(BaseService):
             # Fallback: 키워드 기반 분석
             emotion = self._analyze_emotion_from_keywords(prompt)
             keywords = prompt.split()[:3] if prompt else ["감정"]
-            logger.info(f"Fallback 통합 분석: emotion={emotion}, keywords={keywords}")
-            return {"emotion": emotion, "keywords": keywords}
+            # fallback 감정도 영어로 변환
+            english_emotion = self._convert_emotion_to_english(emotion)
+            logger.info(f"Fallback 통합 분석: emotion={emotion}->{english_emotion}, keywords={keywords}")
+            return {"emotion": english_emotion, "keywords": keywords}
