@@ -49,7 +49,7 @@ from app.schemas.diary import DiaryCreateRequest
 from app.services.ai_log import AIService
 
 from fastapi import Body
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,16 @@ class HandwritingToDiaryRequest(BaseModel):
     user_emotion: str | None = Field(None, description="사용자가 선택한 감정 (happy, sad, angry, peaceful, unrest)")
     uploaded_images: list[dict] | None = Field(None, description="함께 저장할 이미지정보(옵션)")
 
+    @field_validator("user_emotion")
+    @classmethod
+    def validate_user_emotion(cls, v):
+        """사용자 감정 값 검증"""
+        if v is not None:
+            allowed_emotions = ["happy", "sad", "angry", "peaceful", "unrest"]
+            if v not in allowed_emotions:
+                raise ValueError(f"감정은 {allowed_emotions} 중 하나여야 합니다. 입력된 값: {v}")
+        return v
+
 @router.post("/handwriting/to-diary", response_model=BaseResponse[DiaryResponse])
 async def handwriting_to_diary(
     *,
@@ -74,7 +84,13 @@ async def handwriting_to_diary(
     손글씨 이미지 URL 전달 시, OCR(텍스트추출)+AI 다이어리 자동생성까지 모두 처리
     """
     try:
-        logger.info(f"손글씨 OCR 시작 - user_id: {user_id}, image_url: {body.image_url}")
+        logger.info(f"손글씨 OCR 시작 - user_id: {user_id}, image_url: {body.image_url}, user_emotion: {body.user_emotion}")
+
+        # 사용자 감정 검증 로그
+        if body.user_emotion:
+            logger.info(f"사용자 선택 감정: {body.user_emotion}")
+        else:
+            logger.info("사용자 감정 미선택")
 
         # OCR - 손글씨 텍스트 추출
         ocr_text = await handwriting_ocr_from_url(body.image_url)
