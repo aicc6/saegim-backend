@@ -38,6 +38,7 @@ class DiaryResponse(BaseModel):
     ai_emotion_confidence: float | None = None
     user_id: str
     ai_generated_text: str | None = None
+    ocr_text: str | None = None  # 손글씨 인식으로 추출된 원본 텍스트
     is_public: bool
     keywords: list[str] | None = None  # keywords를 리스트 타입으로 수정
     diary_date: date | None = None  # 다이어리 작성 날짜
@@ -68,6 +69,7 @@ class DiaryListResponse(BaseModel):
     title: str | None
     content: str  # 수정된 본문 내용을 표시하기 위해 content 필드 추가
     ai_generated_text: str | None = None  # ai_generated_text 필드 추가
+    ocr_text: str | None = None  # 손글씨 인식으로 추출된 원본 텍스트
     user_emotion: str | None = None
     ai_emotion: str | None = None
     keywords: list[str] | None = None  # keywords를 리스트 타입으로 수정
@@ -101,6 +103,7 @@ class DiaryCreateRequest(BaseModel):
     )
     user_emotion: str | None = Field(None, description="사용자가 선택한 감정")
     ai_generated_text: str | None = Field(None, description="AI가 생성한 텍스트")
+    ocr_text: str | None = Field(None, description="손글씨 인식으로 추출된 원본 텍스트")
     ai_emotion: str | None = Field(None, description="AI가 분석한 감정")
     ai_emotion_confidence: float | None = Field(
         None, ge=0.0, le=1.0, description="AI 감정 분석 신뢰도"

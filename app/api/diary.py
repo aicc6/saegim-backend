@@ -91,6 +91,7 @@ async def handwriting_to_diary(
             content=ocr_text,  # OCR로 추출된 원본 텍스트
             user_emotion=None,
             ai_generated_text=None,  # AI가 생성할 텍스트
+            ocr_text=ocr_text,  # OCR 텍스트를 별도 필드로도 저장
             ai_emotion=None,
             ai_emotion_confidence=None,
             keywords=None,

@@ -164,6 +164,7 @@ class DiaryService(BaseService):
                 ai_emotion=diary_create.ai_emotion,
                 ai_emotion_confidence=diary_create.ai_emotion_confidence,
                 ai_generated_text=diary_create.ai_generated_text,
+                ocr_text=diary_create.ocr_text,
                 keywords=diary_create.keywords,
                 diary_date=diary_create.diary_date,
             )

@@ -43,6 +43,7 @@ class DiaryEntry(Base):
     ai_emotion_confidence: Mapped[float | None] = mapped_column(Float)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), index=True)
     ai_generated_text: Mapped[str | None] = mapped_column()
+    ocr_text: Mapped[str | None] = mapped_column()  # 손글씨 인식으로 추출된 원본 텍스트
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
     keywords: Mapped[list[str] | None] = mapped_column(
         JSONB, nullable=True
