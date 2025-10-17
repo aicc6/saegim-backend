@@ -55,7 +55,8 @@ async def image_proxy(url: str = Query(..., description="프록시할 이미지 
 
     except httpx.TimeoutException as e:
         raise HTTPException(
-            status_code=status.HTTP_408_REQUEST_TIMEOUT, detail="이미지 로드 시간 초과"
+            status_code=status.HTTP_408_REQUEST_TIMEOUT,
+            detail="이미지 로드 시간 초과",
         ) from e
     except httpx.HTTPError as e:
         raise HTTPException(
