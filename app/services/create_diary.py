@@ -6,12 +6,12 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.transaction_manager import TransactionManager
 from app.models.ai_usage_log import AIUsageLog
-from app.models.user import User
+from app.schemas.ai import CreateAiUsageLogRequest, CreateAiUsageLogResponseData
 from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
@@ -26,24 +26,14 @@ class CreateAIUsageLogService(BaseService):
     async def create_ai_usage_log(
         self,
         user_id: UUID,
-        api_type: str,
-        session_id: str,
-        regeneration_count: int = 1,
-        tokens_used: int = 0,
-        request_data: dict[str, Any] | None = None,
-        response_data: dict[str, Any] | None = None,
-    ) -> AIUsageLog:
+        request: CreateAiUsageLogRequest,
+    ):
         """
         AI 사용 로그를 생성합니다.
 
         Args:
             user_id: 사용자 ID (UUID 문자열)
-            api_type: API 타입 (generate/keywords)
-            session_id: 재생성 세션 ID
-            regeneration_count: 현재 재생성 횟수 (1-5)
-            tokens_used: 사용된 토큰 수
-            request_data: 요청 데이터
-            response_data: 응답 데이터
+            request: CreateAiUsageLogRequest
 
         Returns:
             생성된 AI 사용 로그
@@ -52,47 +42,26 @@ class CreateAIUsageLogService(BaseService):
             ValueError: 사용자를 찾을 수 없거나 데이터 검증 실패 시
             SQLAlchemyError: 데이터베이스 오류 시
         """
-        # 사용자 ID 검증 및 조회
-        user = await self._get_user_by_id(user_id)
-        if not user:
-            raise ValueError("사용자를 찾을 수 없습니다.")
+        with TransactionManager.transaction(self._db) as tx:
+            # AI 사용 로그 생성
+            ai_usage_log = AIUsageLog(
+                user_id=user_id,
+                api_type=request.api_type,
+                session_id=request.session_id,
+                regeneration_count=request.regeneration_count,
+                tokens_used=request.tokens_used,
+                request_data=request.request_data,
+                response_data=request.response_data,
+            )
 
-        # 데이터 검증
-        self._validate_log_data(api_type, regeneration_count)
-
-        # AI 사용 로그 생성
-        ai_usage_log = await self._create_ai_usage_log_entry(
-            user.id,
-            api_type,
-            session_id,
-            regeneration_count,
-            tokens_used,
-            request_data or {},
-            response_data or {},
-        )
+            # 데이터베이스에 저장
+            tx.add(ai_usage_log)
 
         logger.info(
-            f"AI 사용 로그 생성 성공: user_id={user.id}, log_id={ai_usage_log.id}"
+            f"AI 사용 로그 생성 성공: user_id={user_id}, log_id={ai_usage_log.id}"
         )
-        return ai_usage_log
 
-    async def _get_user_by_id(self, user_id: UUID) -> User | None:
-        """사용자 ID로 사용자 정보를 조회합니다."""
-        try:
-            # 사용자 정보 조회
-            query = select(User).where(User.id == user_id)
-            result = self._db.execute(query)
-            user = result.scalar_one_or_none()
-
-            if not user:
-                logger.warning(f"사용자 ID로 사용자를 찾을 수 없음: {user_id}")
-                return None
-
-            return user
-
-        except Exception as e:
-            logger.error(f"사용자 조회 중 오류 발생: {e}")
-            return None
+        return CreateAiUsageLogResponseData.model_validate(ai_usage_log)
 
     def _validate_log_data(self, api_type: str, regeneration_count: int) -> None:
         """로그 데이터를 검증합니다."""

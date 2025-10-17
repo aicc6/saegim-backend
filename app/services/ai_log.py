@@ -20,6 +20,7 @@ from app.exceptions.ai import (
     SessionNotFoundException,
 )
 from app.models.ai_usage_log import AIUsageLog
+from app.schemas.ai import GetOriginalUserInputResponseData
 from app.schemas.create_diary import CreateDiaryRequest
 from app.services.base import BaseService
 
@@ -333,31 +334,30 @@ class AIService(BaseService):
             raise SessionNotFoundException(session_id=session_id) from e
 
     async def get_original_user_input(
-        self, user_id: UUID, session_id: str
-    ) -> str | None:
+        self,
+        user_id: UUID,
+        session_id: str,
+    ):
         """세션ID로 원본 사용자 입력 조회"""
-        try:
-            statement = (
-                select(AIUsageLog)
-                .where(AIUsageLog.session_id == session_id)
-                .where(AIUsageLog.user_id == user_id)
-                .where(AIUsageLog.api_type == "integrated_analysis")
-                .order_by(AIUsageLog.created_at.asc())
-                .limit(1)
+        statement = (
+            select(AIUsageLog)
+            .where(AIUsageLog.session_id == session_id)
+            .where(AIUsageLog.user_id == user_id)
+            .where(AIUsageLog.api_type == "integrated_analysis")
+            .order_by(AIUsageLog.created_at.asc())
+            .limit(1)
+        )
+
+        result = self._db.execute(statement).scalar_one_or_none()
+        if result and result.request_data:
+            original_input = (
+                result.request_data.get("prompt")
+                if result.request_data.get("prompt", "").strip()
+                else None
             )
-
-            result = self._db.execute(statement).scalar_one_or_none()
-            if result and result.request_data:
-                import json
-
-                request_data = json.loads(result.request_data)
-                return request_data.get("prompt")
-
-            return None
-
-        except Exception as e:
-            logger.error(f"원본 사용자 입력 조회 실패: {str(e)}")
-            return None
+            if original_input is not None:
+                return GetOriginalUserInputResponseData(original_input=original_input)
+        raise
 
     def test_db_connection(self) -> dict[str, Any]:
         """

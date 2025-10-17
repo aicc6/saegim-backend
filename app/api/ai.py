@@ -4,17 +4,16 @@ AI 텍스트 생성 및 사용 로그 관리
 """
 
 import asyncio
-from typing import Annotated, Any
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Path
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user_id
-from app.db.database import get_session
-from app.schemas.base import BaseResponse
+from app.core.deps import CurrentUserId, DbSession
+from app.schemas.ai import (
+    CreateAiUsageLogRequest,
+    CreateAiUsageLogResponse,
+    GetOriginalUserInputResponse,
+)
 from app.schemas.create_diary import CreateDiaryRequest
 from app.services.ai_log import AIService
 from app.services.create_diary import diary_service
@@ -24,64 +23,59 @@ router = APIRouter(
 )
 
 
-class AIUsageLogRequest(BaseModel):
-    api_type: str
-    session_id: str
-    regeneration_count: int = 1
-    tokens_used: int = 0
-    request_data: dict[str, Any] | None = None
-    response_data: dict[str, Any] | None = None
-
-
-@router.post("/usage-log", response_model=BaseResponse[dict])
+# CHECK: 미사용 여부 확인 필요
+@router.post(
+    "/usage-log",
+    response_model=CreateAiUsageLogResponse,
+)
 async def create_ai_usage_log(
-    usage_log_data: AIUsageLogRequest,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    db: Annotated[Session, Depends(get_session)],
-) -> BaseResponse[dict]:
+    db: DbSession,
+    user_id: CurrentUserId,
+    request: CreateAiUsageLogRequest,
+):
     """AI 사용 로그 생성"""
     service = diary_service(db)
-    result = await service.create_ai_usage_log(
+
+    data = await service.create_ai_usage_log(
         user_id,
-        usage_log_data.api_type,
-        usage_log_data.session_id,
-        usage_log_data.regeneration_count,
-        usage_log_data.tokens_used,
-        usage_log_data.request_data,
-        usage_log_data.response_data,
+        request,
     )
-    return BaseResponse(data=result, message="AI 사용 로그가 생성되었습니다.")
+
+    return CreateAiUsageLogResponse(
+        data=data,
+        message="AI 사용 로그가 생성되었습니다.",
+    )
 
 
-@router.get("/session/{session_id}/original-input", response_model=BaseResponse[dict])
+# CHECK: 미사용 여부 확인 필요
+@router.get(
+    "/session/{session_id}/original-input",
+    response_model=GetOriginalUserInputResponse,
+)
 async def get_original_user_input(
+    db: DbSession,
+    user_id: CurrentUserId,
     *,
     session_id: str = Path(..., description="세션 ID"),
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    db: Annotated[Session, Depends(get_session)],
-) -> BaseResponse[dict]:
+):
     """세션ID로 원본 사용자 입력 조회"""
 
     ai_service = AIService(db)
-    original_input = await ai_service.get_original_user_input(user_id, session_id)
 
-    if not original_input:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="해당 세션의 원본 입력을 찾을 수 없습니다.",
-        )
+    data = await ai_service.get_original_user_input(user_id, session_id)
 
-    return BaseResponse(
-        data={"original_input": original_input}, message="원본 사용자 입력 조회 성공"
+    return GetOriginalUserInputResponse(
+        data=data,
+        message="원본 사용자 입력 조회 성공",
     )
 
 
 @router.post("/generate/stream")
 async def stream_ai_text(
+    db: DbSession,
+    user_id: CurrentUserId,
     data: CreateDiaryRequest,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    db: Annotated[Session, Depends(get_session)],
-) -> StreamingResponse:
+):
     """AI 텍스트 실시간 스트리밍 생성"""
     ai_service = AIService(db)
 
@@ -119,12 +113,13 @@ async def stream_ai_text(
     )
 
 
+# CHECK: 미사용 여부 확인 필요
 @router.post("/regenerate/{session_id}/stream")
 async def stream_regenerate_ai_text(
+    db: DbSession,
+    user_id: CurrentUserId,
     session_id: str,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    db: Annotated[Session, Depends(get_session)],
-) -> StreamingResponse:
+):
     """세션 ID 기반 AI 텍스트 실시간 스트리밍 재생성"""
     ai_service = AIService(db)
 
