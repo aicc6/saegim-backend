@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.ai_usage_log import AIUsageLog
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class CreateAIUsageLogService(BaseService):
     """AI 사용 로그 생성 서비스 클래스"""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: Session):
         super().__init__(db)
 
     async def create_ai_usage_log(
@@ -78,14 +78,10 @@ class CreateAIUsageLogService(BaseService):
 
     async def _get_user_by_id(self, user_id: UUID) -> User | None:
         """사용자 ID로 사용자 정보를 조회합니다."""
-        if self.db is None:
-            logger.error("Database session not available")
-            return None
-
         try:
             # 사용자 정보 조회
             query = select(User).where(User.id == user_id)
-            result = await self.db.execute(query)
+            result = self._db.execute(query)
             user = result.scalar_one_or_none()
 
             if not user:
@@ -138,18 +134,14 @@ class CreateAIUsageLogService(BaseService):
             )
 
             # 데이터베이스에 저장
-            if self.db is None:
-                raise ValueError("Database session not available")
-
-            self.db.add(ai_usage_log)
-            await self.db.commit()
-            await self.db.refresh(ai_usage_log)
+            self._db.add(ai_usage_log)
+            self._db.commit()
+            self._db.refresh(ai_usage_log)
 
             return ai_usage_log
 
         except Exception as e:
-            if self.db is not None:
-                await self.db.rollback()
+            self._db.rollback()
             logger.error(f"AI 사용 로그 엔트리 생성 중 오류 발생: {e}")
             raise
 

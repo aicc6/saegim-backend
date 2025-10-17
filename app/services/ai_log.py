@@ -54,10 +54,6 @@ class ContentLength(str, Enum):
 class AIService(BaseService):
     def __init__(self, db: Session):
         super().__init__(db)
-        if not self.db:
-            raise ValueError("Database session is required for AIService")
-        # 타입 체커를 위한 명시적 어서션
-        assert isinstance(self.db, Session), "AIService requires a Session instance"
 
         import os
 
@@ -71,19 +67,12 @@ class AIService(BaseService):
             "슬픔": "sad",
             "화남": "angry",
             "평온": "peaceful",
-            "불안": "unrest"
+            "불안": "unrest",
         }
 
     def _convert_emotion_to_english(self, korean_emotion: str) -> str:
         """한국어 감정을 영어로 변환"""
         return self.emotion_mapping.get(korean_emotion, "peaceful")
-
-    @property
-    def session(self) -> Session:
-        """타입 안전한 세션 접근"""
-        if not self.db or not isinstance(self.db, Session):
-            raise ValueError("Database session is required for AIService")
-        return self.db
 
     async def stream_ai_text(
         self,
@@ -105,7 +94,7 @@ class AIService(BaseService):
                 .where(AIUsageLog.session_id == session_id)
                 .where(AIUsageLog.api_type == "integrated_analysis")
             )
-            existing_logs = self.session.execute(statement).scalars().all()
+            existing_logs = self._db.execute(statement).scalars().all()
             regeneration_count = len(existing_logs) + 1
 
             if regeneration_count > 5:
@@ -188,8 +177,8 @@ class AIService(BaseService):
                 tokens_used=total_tokens,
                 regeneration_count=regeneration_count,
             )
-            self.session.add(ai_usage_log)
-            self.session.commit()
+            self._db.add(ai_usage_log)
+            self._db.commit()
 
             # 완료 메타데이터 전송
             final_data = {
@@ -327,7 +316,7 @@ class AIService(BaseService):
                 .where(AIUsageLog.api_type == "integrated_analysis")
             )
 
-            existing_logs = self.session.execute(statement).scalars().all()
+            existing_logs = self._db.execute(statement).scalars().all()
             current_count = len(existing_logs)
 
             return {
@@ -357,7 +346,7 @@ class AIService(BaseService):
                 .limit(1)
             )
 
-            result = self.session.execute(statement).scalar_one_or_none()
+            result = self._db.execute(statement).scalar_one_or_none()
             if result and result.request_data:
                 import json
 
@@ -380,13 +369,13 @@ class AIService(BaseService):
         try:
             # 간단한 쿼리 실행
             statement = select(func.count()).select_from(AIUsageLog)
-            result = self.session.execute(statement).scalar()
+            result = self._db.execute(statement).scalar()
 
             return {
                 "status": "success",
                 "message": "DB 연결 정상",
                 "total_logs": result,
-                "db_session": str(type(self.session)),
+                "db_session": str(type(self._db)),
                 "timestamp": str(datetime.now()),
             }
 
@@ -423,7 +412,7 @@ class AIService(BaseService):
                 .where(func.date(AIUsageLog.created_at) == today)
             )
 
-            logs = self.session.execute(statement).scalars().all()
+            logs = self._db.execute(statement).scalars().all()
 
             # 세션별 통계
             session_stats = {}
@@ -455,9 +444,9 @@ class AIService(BaseService):
                 "total_sessions": len(session_stats),
                 "total_requests": total_requests,
                 "total_tokens_used": total_tokens,
-                "average_tokens_per_request": round(total_tokens / total_requests, 2)
-                if total_requests > 0
-                else 0,
+                "average_tokens_per_request": (
+                    round(total_tokens / total_requests, 2) if total_requests > 0 else 0
+                ),
                 "sessions": list(session_stats.values()),
             }
 
@@ -487,7 +476,7 @@ class AIService(BaseService):
                 .limit(1)
             )
 
-            result = self.session.execute(statement)
+            result = self._db.execute(statement)
             last_log = result.scalar_one_or_none()
 
             if not last_log:
@@ -499,7 +488,7 @@ class AIService(BaseService):
                 return
 
             # 현재 세션의 총 재생성 횟수 확인 (5회 제한)
-            session_logs_count = self.session.execute(
+            session_logs_count = self._db.execute(
                 select(func.count(AIUsageLog.id))
                 .where(AIUsageLog.session_id == session_id)
                 .where(AIUsageLog.api_type == "integrated_analysis")
@@ -605,8 +594,8 @@ class AIService(BaseService):
                 tokens_used=total_tokens,
                 regeneration_count=new_regeneration_count,
             )
-            self.session.add(ai_usage_log)
-            self.session.commit()
+            self._db.add(ai_usage_log)
+            self._db.commit()
 
             # 완료 메타데이터 전송
             final_data = {
@@ -871,7 +860,9 @@ class AIService(BaseService):
                                     str(kw).strip()
                                     for kw in keywords
                                     if str(kw).strip()
-                                ][:5]  # 최대 5개
+                                ][
+                                    :5
+                                ]  # 최대 5개
                             else:
                                 keywords = []
 
@@ -881,7 +872,10 @@ class AIService(BaseService):
                             logger.info(
                                 f"통합 분석 완료: emotion={emotion}->{english_emotion}, keywords={keywords}"
                             )
-                            return {"emotion": english_emotion, "keywords": keywords}  # 영어 감정 반환
+                            return {
+                                "emotion": english_emotion,
+                                "keywords": keywords,
+                            }  # 영어 감정 반환
 
                         else:
                             raise ValueError("응답에 필수 필드가 없습니다")
@@ -922,5 +916,7 @@ class AIService(BaseService):
             keywords = prompt.split()[:3] if prompt else ["감정"]
             # fallback 감정도 영어로 변환
             english_emotion = self._convert_emotion_to_english(emotion)
-            logger.info(f"Fallback 통합 분석: emotion={emotion}->{english_emotion}, keywords={keywords}")
+            logger.info(
+                f"Fallback 통합 분석: emotion={emotion}->{english_emotion}, keywords={keywords}"
+            )
             return {"emotion": english_emotion, "keywords": keywords}

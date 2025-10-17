@@ -27,9 +27,9 @@ settings = get_settings()
 class GoogleOAuthService(BaseService):
     """구글 OAuth 서비스"""
 
-    def __init__(self):
+    def __init__(self, db: Session):
         """초기화"""
-        super().__init__()  # BaseService 초기화 (DB 없이)
+        super().__init__(db)
         self.client_id = settings.google_client_id
         self.client_secret = settings.google_client_secret
         self.redirect_uri = settings.google_redirect_uri
@@ -104,7 +104,8 @@ class GoogleOAuthService(BaseService):
             raise OAuthErrors.userinfo_request_failed()
 
     async def process_oauth_callback(
-        self, code: str, db: Session
+        self,
+        code: str,
     ) -> tuple[User, OAuthToken]:
         """OAuth 콜백 처리
 
@@ -123,7 +124,7 @@ class GoogleOAuthService(BaseService):
 
         # 기존 사용자 확인 또는 새로 생성
         stmt = select(User).where(User.email == user_info.email)
-        result = db.execute(stmt)
+        result = self._db.execute(stmt)
         user = result.scalar_one_or_none()
 
         if user and user.deleted_at is not None:
@@ -177,16 +178,16 @@ class GoogleOAuthService(BaseService):
                 provider_id=user_info.id,  # 구글 사용자 ID 설정
                 is_active=True,
             )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
+            self._db.add(user)
+            self._db.commit()
+            self._db.refresh(user)
 
         # OAuth 토큰 저장/업데이트
         stmt = select(OAuthToken).where(
             OAuthToken.user_id == user.id,
             OAuthToken.provider == OAuthProvider.GOOGLE.value,
         )
-        result = db.execute(stmt)
+        result = self._db.execute(stmt)
         oauth_token = result.scalar_one_or_none()
 
         if oauth_token:
@@ -202,14 +203,16 @@ class GoogleOAuthService(BaseService):
                 provider=OAuthProvider.GOOGLE.value,
                 access_token=token_response.access_token,
                 refresh_token=token_response.refresh_token,
-                expires_at=datetime.now(UTC).replace(microsecond=0)
-                + timedelta(seconds=token_response.expires_in)
-                if token_response.expires_in
-                else None,
+                expires_at=(
+                    datetime.now(UTC).replace(microsecond=0)
+                    + timedelta(seconds=token_response.expires_in)
+                    if token_response.expires_in
+                    else None
+                ),
             )
-            db.add(oauth_token)
+            self._db.add(oauth_token)
 
-        db.commit()
-        db.refresh(oauth_token)
+        self._db.commit()
+        self._db.refresh(oauth_token)
 
         return user, oauth_token

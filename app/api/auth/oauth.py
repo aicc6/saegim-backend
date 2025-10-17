@@ -50,8 +50,8 @@ async def google_callback(
         logger.info("Google OAuth callback initiated")
 
     try:
-        oauth_service = GoogleOAuthService()
-        user, _ = await oauth_service.process_oauth_callback(code, db)
+        oauth_service = GoogleOAuthService(db)
+        user, _ = await oauth_service.process_oauth_callback(code)
 
         # JWT 토큰 생성
         access_token = create_access_token({"sub": str(user.id)})

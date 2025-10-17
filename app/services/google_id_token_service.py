@@ -54,8 +54,8 @@ class GoogleIdTokenService(BaseService):
         expires_at = self._extract_expiration(token_info)
         self._upsert_oauth_token(user, request.id_token, expires_at)
 
-        self.db.commit()
-        self.db.refresh(user)
+        self._db.commit()
+        self._db.refresh(user)
 
         logger.info("Google ID 토큰 로그인 성공", extra={"user_id": str(user.id)})
         return user
@@ -126,11 +126,11 @@ class GoogleIdTokenService(BaseService):
 
     def _find_user(self, token_email: str, requested_email: str) -> User | None:
         stmt = select(User).where(User.email == token_email)
-        user = self.db.execute(stmt).scalar_one_or_none()
+        user = self._db.execute(stmt).scalar_one_or_none()
 
         if user is None and requested_email.lower() != token_email.lower():
             stmt = select(User).where(User.email == requested_email)
-            user = self.db.execute(stmt).scalar_one_or_none()
+            user = self._db.execute(stmt).scalar_one_or_none()
 
         return user
 
@@ -205,8 +205,8 @@ class GoogleIdTokenService(BaseService):
             provider_id=provider_id,
             is_active=True,
         )
-        self.db.add(user)
-        self.db.flush()
+        self._db.add(user)
+        self._db.flush()
         return user
 
     def _upsert_oauth_token(
@@ -219,7 +219,7 @@ class GoogleIdTokenService(BaseService):
             OAuthToken.user_id == user.id,
             OAuthToken.provider == OAuthProvider.GOOGLE.value,
         )
-        oauth_token = self.db.execute(stmt).scalar_one_or_none()
+        oauth_token = self._db.execute(stmt).scalar_one_or_none()
 
         if oauth_token:
             oauth_token.access_token = id_token
@@ -233,7 +233,7 @@ class GoogleIdTokenService(BaseService):
                 refresh_token=None,
                 expires_at=expires_at,
             )
-            self.db.add(oauth_token)
+            self._db.add(oauth_token)
 
     @staticmethod
     def _extract_expiration(token_info: dict[str, str]) -> datetime | None:

@@ -22,9 +22,8 @@ logger = logging.getLogger(__name__)
 class DiaryService(BaseService):
     """다이어리 비즈니스 로직 (캘린더용)"""
 
-    def __init__(self, session: Session):
-        super().__init__(session)
-        self.session = session  # 기존 코드 호환성을 위해 유지
+    def __init__(self, db: Session):
+        super().__init__(db)
 
     def get_diaries(
         self,
@@ -70,11 +69,13 @@ class DiaryService(BaseService):
         # 날짜 범위 필터링 (diary_date 우선, 없으면 created_at 사용)
         if start_date:
             statement = statement.where(
-                func.coalesce(DiaryEntry.diary_date, func.date(DiaryEntry.created_at)) >= start_date
+                func.coalesce(DiaryEntry.diary_date, func.date(DiaryEntry.created_at))
+                >= start_date
             )
         if end_date:
             statement = statement.where(
-                func.coalesce(DiaryEntry.diary_date, func.date(DiaryEntry.created_at)) <= end_date
+                func.coalesce(DiaryEntry.diary_date, func.date(DiaryEntry.created_at))
+                <= end_date
             )
 
         # 정렬 적용 (diary_date 우선, 없으면 created_at 사용)
@@ -82,13 +83,17 @@ class DiaryService(BaseService):
         # 2차: created_at (내림차순/오름차순) - 같은 날짜 내에서 시간순 정렬
         if sort_order.lower() == SortOrder.DESC.value:
             statement = statement.order_by(
-                func.coalesce(DiaryEntry.diary_date, func.date(DiaryEntry.created_at)).desc(),
-                DiaryEntry.created_at.desc()  # 2차 정렬: 같은 날짜 내에서 최신순
+                func.coalesce(
+                    DiaryEntry.diary_date, func.date(DiaryEntry.created_at)
+                ).desc(),
+                DiaryEntry.created_at.desc(),  # 2차 정렬: 같은 날짜 내에서 최신순
             )
         else:
             statement = statement.order_by(
-                func.coalesce(DiaryEntry.diary_date, func.date(DiaryEntry.created_at)).asc(),
-                DiaryEntry.created_at.asc()  # 2차 정렬: 같은 날짜 내에서 오래된순
+                func.coalesce(
+                    DiaryEntry.diary_date, func.date(DiaryEntry.created_at)
+                ).asc(),
+                DiaryEntry.created_at.asc(),  # 2차 정렬: 같은 날짜 내에서 오래된순
             )
 
         # 전체 개수 조회 (user_id 필터 적용, Soft Delete 제외)
@@ -98,7 +103,7 @@ class DiaryService(BaseService):
                 DiaryEntry.user_id == user_id, DiaryEntry.deleted_at.is_(None)
             )
 
-        result = self.session.execute(count_statement)
+        result = self._db.execute(count_statement)
         total_count = result.scalar_one()
 
         # 페이지네이션 적용
@@ -106,7 +111,7 @@ class DiaryService(BaseService):
         statement = statement.offset(offset).limit(page_size)
 
         # 결과 조회
-        result = self.session.execute(statement)
+        result = self._db.execute(statement)
         diaries = result.scalars().all()
 
         return diaries, total_count
@@ -122,7 +127,7 @@ class DiaryService(BaseService):
         if user_id is not None:
             statement = statement.where(DiaryEntry.user_id == user_id)
 
-        result = self.session.execute(statement)
+        result = self._db.execute(statement)
         return result.scalar_one_or_none()
 
     def get_diaries_by_date_range(
@@ -138,15 +143,19 @@ class DiaryService(BaseService):
             .where(
                 DiaryEntry.user_id == user_id,
                 DiaryEntry.deleted_at.is_(None),
-                func.coalesce(DiaryEntry.diary_date, func.date(DiaryEntry.created_at)) >= start_date,
-                func.coalesce(DiaryEntry.diary_date, func.date(DiaryEntry.created_at)) <= end_date,
+                func.coalesce(DiaryEntry.diary_date, func.date(DiaryEntry.created_at))
+                >= start_date,
+                func.coalesce(DiaryEntry.diary_date, func.date(DiaryEntry.created_at))
+                <= end_date,
             )
             .order_by(
-                func.coalesce(DiaryEntry.diary_date, func.date(DiaryEntry.created_at)).desc()
+                func.coalesce(
+                    DiaryEntry.diary_date, func.date(DiaryEntry.created_at)
+                ).desc()
             )
         )
 
-        result = self.session.execute(statement)
+        result = self._db.execute(statement)
         return result.scalars().all()
 
     def create_diary(
@@ -170,9 +179,9 @@ class DiaryService(BaseService):
             )
 
             # 데이터베이스에 저장
-            self.session.add(new_diary)
-            self.session.commit()
-            self.session.refresh(new_diary)
+            self._db.add(new_diary)
+            self._db.commit()
+            self._db.refresh(new_diary)
 
             # 업로드된 이미지가 있다면 Image 레코드 생성
             if diary_create.uploaded_images:
@@ -189,15 +198,15 @@ class DiaryService(BaseService):
                         exif_removed=True,  # 이미 처리된 이미지이므로 True
                         created_at=datetime.now(UTC),
                     )
-                    self.session.add(new_image)
+                    self._db.add(new_image)
 
                 # 이미지 레코드들 저장
-                self.session.commit()
+                self._db.commit()
 
             return new_diary
 
         except Exception as e:
-            self.session.rollback()
+            self._db.rollback()
             logger.error(f"다이어리 생성 실패 - user_id: {user_id}, error: {e}")
             raise
 
@@ -222,9 +231,9 @@ class DiaryService(BaseService):
         diary.updated_at = datetime.now(UTC)
 
         # 데이터베이스에 저장
-        self.session.add(diary)
-        self.session.commit()
-        self.session.refresh(diary)
+        self._db.add(diary)
+        self._db.commit()
+        self._db.refresh(diary)
 
         return diary
 
@@ -236,7 +245,7 @@ class DiaryService(BaseService):
             return False
 
         with database_transaction_handler(
-            self.session,
+            self._db,
             ErrorPatterns.DIARY_DELETE_FAILED,
             log_context=f"다이어리 삭제 - diary_id: {diary_id}",
         ):
@@ -245,7 +254,7 @@ class DiaryService(BaseService):
             from app.utils.minio_upload import get_minio_uploader
 
             stmt = select(Image).where(Image.diary_id == diary_id)
-            result = self.session.execute(stmt)
+            result = self._db.execute(stmt)
             images = result.scalars().all()
 
             # MinIO에서 이미지 파일들 삭제
@@ -267,13 +276,13 @@ class DiaryService(BaseService):
 
                 # 데이터베이스에서 이미지 레코드들 삭제
                 for image in images:
-                    self.session.delete(image)
+                    self._db.delete(image)
 
             # Soft Delete: deleted_at 필드를 현재 시간으로 설정
             diary.deleted_at = datetime.now(UTC)
 
             # 데이터베이스에 저장
-            self.session.add(diary)
-            self.session.commit()
+            self._db.add(diary)
+            self._db.commit()
 
             return True
