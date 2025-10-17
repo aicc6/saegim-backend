@@ -30,7 +30,7 @@ class TransactionManager:
         try:
             yield session
             session.commit()
-            logger.debug("Transaction committed successfully")
+            logger.info("Transaction committed successfully")
         except Exception as e:
             session.rollback()
             logger.error(f"Transaction rolled back due to error: {e}")

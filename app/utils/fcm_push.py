@@ -5,7 +5,7 @@ Firebase Cloud Messaging을 사용하여 푸시 알림을 전송하는 유틸리
 """
 
 import json
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 import httpx
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -46,8 +46,12 @@ class FCMPushService:
                     json_str.replace("\\\\", "\\")  # 이중 이스케이프된 \ 처리
                     .replace('\\"', '"')  # 이스케이프된 " 처리
                     .replace("\\'", "'")  # 이스케이프된 ' 처리
-                    .replace("-----BEGINPRIVATEKEY-----", "-----BEGIN PRIVATE KEY-----")  # Private key 시작 태그 수정
-                    .replace("-----ENDPRIVATEKEY-----", "-----END PRIVATE KEY-----")  # Private key 종료 태그 수정
+                    .replace(
+                        "-----BEGINPRIVATEKEY-----", "-----BEGIN PRIVATE KEY-----"
+                    )  # Private key 시작 태그 수정
+                    .replace(
+                        "-----ENDPRIVATEKEY-----", "-----END PRIVATE KEY-----"
+                    )  # Private key 종료 태그 수정
                 )
 
                 # JSON 파싱 시도
@@ -55,14 +59,17 @@ class FCMPushService:
 
                 # 파싱 성공 후 private_key의 \n을 실제 개행으로 변환
                 if "private_key" in self.service_account:
-                    self.service_account["private_key"] = self.service_account["private_key"].replace("\\n", "\n")
+                    self.service_account["private_key"] = self.service_account[
+                        "private_key"
+                    ].replace("\\n", "\n")
 
             except json.JSONDecodeError:
                 # 기본 파싱이 실패하면 기존 방식으로 시도
-                json_str = (
-                    json_str.replace("\\\\n", "\\n")  # 이중 이스케이프된 \n 처리
-                    .replace("\\n", "\n")  # 일반 \n 처리
-                )
+                json_str = json_str.replace(
+                    "\\\\n", "\\n"
+                ).replace(  # 이중 이스케이프된 \n 처리
+                    "\\n", "\n"
+                )  # 일반 \n 처리
                 self.service_account = json.loads(json_str)
 
             # 필수 필드 검증
@@ -153,7 +160,9 @@ class FCMPushService:
                 token_data = response.json()
                 self._access_token = token_data["access_token"]
                 # 50분 후 만료로 설정 (실제는 1시간이지만 여유를 둠)
-                self._token_expires_at = datetime.now(timezone.utc) + timedelta(minutes=50)
+                self._token_expires_at = datetime.now(timezone.utc) + timedelta(
+                    minutes=50
+                )
 
                 return self._access_token
 
@@ -163,7 +172,7 @@ class FCMPushService:
 
     async def send_notification(
         self, token: str, title: str, body: str, data: Optional[Dict[str, str]] = None
-    ) -> Dict[str, any]:
+    ) -> dict[str, Any]:
         """
         FCM 푸시 알림 전송
 
@@ -206,10 +215,16 @@ class FCMPushService:
 
                 if response.status_code == 200:
                     logger.info(f"FCM 알림 전송 성공: {title}")
-                    return {"success": True, "error_type": None, "response": response.json()}
+                    return {
+                        "success": True,
+                        "error_type": None,
+                        "response": response.json(),
+                    }
                 else:
                     response_data = response.json() if response.content else {}
-                    error_type = self._get_error_type(response.status_code, response_data)
+                    error_type = self._get_error_type(
+                        response.status_code, response_data
+                    )
 
                     logger.error(
                         f"FCM 알림 전송 실패: {response.status_code} - {response.text}"
@@ -218,7 +233,7 @@ class FCMPushService:
                     return {
                         "success": False,
                         "error_type": error_type,
-                        "response": response_data
+                        "response": response_data,
                     }
 
         except Exception as e:
@@ -231,7 +246,10 @@ class FCMPushService:
             # FCM 특정 오류 코드 확인
             error_details = response_data.get("error", {}).get("details", [])
             for detail in error_details:
-                if detail.get("@type") == "type.googleapis.com/google.firebase.fcm.v1.FcmError":
+                if (
+                    detail.get("@type")
+                    == "type.googleapis.com/google.firebase.fcm.v1.FcmError"
+                ):
                     return detail.get("errorCode", "NOT_FOUND")
             return "NOT_FOUND"
         elif status_code == 400:
@@ -256,7 +274,9 @@ class FCMPushService:
             data={"type": "diary_reminder"},
         )
 
-    async def send_ai_analysis_complete(self, token: str, diary_id: str) -> Dict[str, any]:
+    async def send_ai_analysis_complete(
+        self, token: str, diary_id: str
+    ) -> Dict[str, any]:
         """AI 감정 분석 완료 알림 전송"""
         return await self.send_notification(
             token=token,

@@ -12,6 +12,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.base import BaseResponse
 from app.utils.validators import convert_uuid_to_string
 
 
@@ -54,7 +55,7 @@ class NotificationFrequency(str, Enum):
 
 
 # Request Schemas
-class FCMTokenRegisterRequest(BaseModel):
+class RegisterFcmTokenRequest(BaseModel):
     """FCM 토큰 등록 요청"""
 
     model_config = ConfigDict(from_attributes=True)
@@ -75,7 +76,7 @@ class FCMTokenCreate(BaseModel):
     device_info: dict[str, Any] | None = Field(None, description="디바이스 정보")
 
 
-class NotificationSendRequest(BaseModel):
+class SendNotificationRequest(BaseModel):
     """알림 전송 요청"""
 
     model_config = ConfigDict(from_attributes=True)
@@ -115,7 +116,7 @@ class NotificationSettingsUpdate(BaseModel):
 
     @field_validator("diary_reminder_time")
     @classmethod
-    def validate_time_format(cls, v):
+    def validate_time_format(cls, v: Any):
         """시간 형식 검증 (HH:MM)"""
         if v is not None:
             import re
@@ -126,7 +127,7 @@ class NotificationSettingsUpdate(BaseModel):
 
     @field_validator("diary_reminder_days")
     @classmethod
-    def validate_weekdays(cls, v):
+    def validate_weekdays(cls, v: Any):
         """요일 배열 검증"""
         if v is not None:
             valid_days = {
@@ -170,7 +171,7 @@ class DiaryNotificationCreate(BaseModel):
 
 
 # Response Schemas
-class FCMTokenResponse(BaseModel):
+class RegisterFcmTokenResponseData(BaseModel):
     """FCM 토큰 응답"""
 
     model_config = ConfigDict(from_attributes=True)
@@ -184,7 +185,15 @@ class FCMTokenResponse(BaseModel):
     updated_at: datetime | None
 
 
-class NotificationSettingsResponse(BaseModel):
+class RegisterFcmTokenResponse(BaseResponse[RegisterFcmTokenResponseData]):
+    pass
+
+
+class GetFcmTokensResponse(BaseResponse[list[RegisterFcmTokenResponseData]]):
+    pass
+
+
+class NotificationSettingsResponseData(BaseModel):
     """알림 설정 응답 - notification_settings 테이블 구조와 일치"""
 
     model_config = ConfigDict(from_attributes=True)
@@ -207,12 +216,16 @@ class NotificationSettingsResponse(BaseModel):
 
     @field_validator("id", "user_id", mode="before")
     @classmethod
-    def validate_uuid(cls, v):
+    def validate_uuid(cls, v: Any):
         """UUID를 문자열로 변환"""
         return convert_uuid_to_string(v)
 
 
-class NotificationSendResponse(BaseModel):
+class NotificationSettingsResponse(BaseResponse[NotificationSettingsResponseData]):
+    pass
+
+
+class SendNotificationResponseData(BaseModel):
     """알림 전송 응답"""
 
     model_config = ConfigDict(from_attributes=True)
@@ -224,7 +237,11 @@ class NotificationSendResponse(BaseModel):
     message: str
 
 
-class NotificationHistoryResponse(BaseModel):
+class SendNotificationResponse(BaseResponse[SendNotificationResponseData]):
+    pass
+
+
+class NotificationHistoryResponseData(BaseModel):
     """알림 목록 응답 (프론트 사용 필드만)"""
 
     model_config = ConfigDict(from_attributes=True)
@@ -239,9 +256,44 @@ class NotificationHistoryResponse(BaseModel):
 
     @field_validator("id", mode="before")
     @classmethod
-    def validate_uuid(cls, v):
+    def validate_uuid(cls, v: Any):
         """UUID를 문자열로 변환"""
         return convert_uuid_to_string(v)
+
+
+class NotificationHistoryResponse(BaseResponse[list[NotificationHistoryResponseData]]):
+    pass
+
+
+class MarkNotificationAsReadResponseData(BaseModel):
+    notification_id: UUID
+    updated_histories: int
+    read_at: str
+
+
+class MarkNotificationAsReadResponse(BaseResponse[MarkNotificationAsReadResponseData]):
+    pass
+
+
+class MarkNotificationsAsReadResponseData(BaseModel):
+    updated_notifications: int
+    updated_histories: int
+    read_at: str
+
+
+class MarkNotificationsAsReadResponse(
+    BaseResponse[MarkNotificationsAsReadResponseData]
+):
+    pass
+
+
+class DeleteNotificationResponseData(BaseModel):
+    notification_id: str
+    deleted: bool
+
+
+class DeleteNotificationResponse(BaseResponse[DeleteNotificationResponseData]):
+    pass
 
 
 class FCMTokenListResponse(BaseModel):
@@ -249,5 +301,5 @@ class FCMTokenListResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    tokens: list[FCMTokenResponse]
+    tokens: list[RegisterFcmTokenResponseData]
     total: int

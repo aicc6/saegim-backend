@@ -21,6 +21,18 @@ class BaseResponse(BaseModel, Generic[T]):
     request_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 
+class StringResponse(BaseResponse[str]):
+    pass
+
+
+class MessageResponseData(BaseModel):
+    message: str
+
+
+class MessageResponse(BaseResponse[MessageResponseData]):
+    pass
+
+
 class PaginationInfo(BaseModel):
     """페이지네이션 정보"""
 

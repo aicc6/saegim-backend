@@ -3,95 +3,101 @@
 FCM 푸시 알림, 인앱 알림 관리 및 읽음 처리 통합 API
 """
 
-from datetime import UTC
-from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Query, status
 
-from app.core.deps import get_current_user_id
-from app.db.database import get_session
-from app.models.fcm import NotificationHistory
-from app.models.notification import Notification
-from app.schemas.base import BaseResponse
+from app.core.deps import CurrentUserId, DbSession
+from app.schemas.base import StringResponse
 from app.schemas.notification import (
-    FCMTokenRegisterRequest,
-    FCMTokenResponse,
+    DeleteNotificationResponse,
+    GetFcmTokensResponse,
+    MarkNotificationAsReadResponse,
+    MarkNotificationsAsReadResponse,
     NotificationHistoryResponse,
-    NotificationSendRequest,
-    NotificationSendResponse,
     NotificationSettingsResponse,
     NotificationSettingsUpdate,
+    RegisterFcmTokenRequest,
+    RegisterFcmTokenResponse,
+    SendNotificationResponse,
 )
 from app.services.notification_service import NotificationService
+from app.utils.fcm_push import get_fcm_service
 
 # Protected endpoints (auth required)
 router = APIRouter(tags=["Notifications"])
 
 
 # ==================== FCM 토큰 관리 ====================
-
-
 @router.post(
     "/tokens",
-    response_model=BaseResponse[FCMTokenResponse],
+    response_model=RegisterFcmTokenResponse,
     status_code=status.HTTP_201_CREATED,
     summary="FCM 토큰 등록",
     description="새로운 FCM 토큰을 등록하거나 기존 토큰을 업데이트합니다.",
 )
 def register_fcm_token(
-    token_data: FCMTokenRegisterRequest,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    session: Annotated[Session, Depends(get_session)],
+    db: DbSession,
+    user_id: CurrentUserId,
+    token_data: RegisterFcmTokenRequest,
 ):
     """FCM 토큰 등록"""
-    notification_service = NotificationService(session)
-    token = notification_service.register_token(user_id, token_data)
-    return BaseResponse(
-        success=True, message="FCM 토큰이 성공적으로 등록되었습니다.", data=token
+    fcm_service = get_fcm_service()
+    notification_service = NotificationService(db, fcm_service)
+
+    data = notification_service.register_token(user_id, token_data)
+
+    return RegisterFcmTokenResponse(
+        data=data,
+        message="FCM 토큰이 성공적으로 등록되었습니다.",
     )
 
 
 @router.get(
     "/tokens",
-    response_model=BaseResponse[list[FCMTokenResponse]],
+    response_model=GetFcmTokensResponse,
     summary="FCM 토큰 목록 조회",
     description="현재 사용자의 활성 FCM 토큰 목록을 조회합니다.",
 )
 def get_fcm_tokens(
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    session: Annotated[Session, Depends(get_session)],
+    db: DbSession,
+    user_id: CurrentUserId,
 ):
     """FCM 토큰 목록 조회"""
-    notification_service = NotificationService(session)
-    tokens = notification_service.get_user_tokens(user_id)
-    return BaseResponse(
-        success=True, message="FCM 토큰 목록을 성공적으로 조회했습니다.", data=tokens
+    fcm_service = get_fcm_service()
+    notification_service = NotificationService(db, fcm_service)
+
+    data = notification_service.get_user_tokens(user_id)
+
+    return GetFcmTokensResponse(
+        data=data,
+        message="FCM 토큰 목록을 성공적으로 조회했습니다.",
     )
 
 
 @router.delete(
     "/tokens/{token_id}",
-    response_model=BaseResponse[str],
+    response_model=StringResponse,
     summary="FCM 토큰 삭제",
     description="지정된 FCM 토큰을 삭제(비활성화)합니다.",
 )
 def delete_fcm_token(
+    db: DbSession,
+    user_id: CurrentUserId,
     token_id: str,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    session: Annotated[Session, Depends(get_session)],
 ):
     """FCM 토큰 삭제"""
-    notification_service = NotificationService(session)
-    success = notification_service.delete_token(user_id, token_id)
-    if success:
-        return BaseResponse(
-            success=True,
-            message="FCM 토큰이 성공적으로 삭제되었습니다.",
-            data="deleted",
-        )
+    fcm_service = get_fcm_service()
+    notification_service = NotificationService(db, fcm_service)
+
+    notification_service.delete_token(user_id, token_id)
+
+    data = "deleted"
+
+    return StringResponse(
+        message="FCM 토큰이 성공적으로 삭제되었습니다.",
+        data=data,
+    )
 
 
 # ==================== 알림 설정 관리 ====================
@@ -99,77 +105,59 @@ def delete_fcm_token(
 
 @router.get(
     "/settings",
-    response_model=BaseResponse[NotificationSettingsResponse],
+    response_model=NotificationSettingsResponse,
     summary="알림 설정 조회",
     description="현재 사용자의 알림 설정을 조회합니다.",
 )
 def get_notification_settings(
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    session: Annotated[Session, Depends(get_session)],
+    db: DbSession,
+    user_id: CurrentUserId,
 ):
     """알림 설정 조회"""
-    notification_service = NotificationService(session)
-    settings = notification_service.get_notification_settings(user_id)
-    return BaseResponse(
-        success=True, message="알림 설정을 성공적으로 조회했습니다.", data=settings
+    fcm_service = get_fcm_service()
+    notification_service = NotificationService(db, fcm_service)
+
+    data = notification_service.get_notification_settings(user_id)
+
+    return NotificationSettingsResponse(
+        data=data,
+        message="알림 설정을 성공적으로 조회했습니다.",
     )
 
 
 @router.patch(
     "/settings",
-    response_model=BaseResponse[NotificationSettingsResponse],
+    response_model=NotificationSettingsResponse,
     summary="알림 설정 업데이트",
     description="사용자의 알림 설정을 업데이트합니다.",
 )
 def update_notification_settings(
+    db: DbSession,
+    user_id: CurrentUserId,
     settings_data: NotificationSettingsUpdate,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    session: Annotated[Session, Depends(get_session)],
 ):
     """알림 설정 업데이트"""
-    notification_service = NotificationService(session)
-    updated_settings = notification_service.update_notification_settings(
-        user_id, settings_data
-    )
-    return BaseResponse(
-        success=True,
+    fcm_service = get_fcm_service()
+    notification_service = NotificationService(db, fcm_service)
+
+    data = notification_service.update_notification_settings(user_id, settings_data)
+
+    return NotificationSettingsResponse(
+        data=data,
         message="알림 설정이 성공적으로 업데이트되었습니다.",
-        data=updated_settings,
     )
 
 
 # ==================== 알림 전송 ====================
-
-
-@router.post(
-    "/send",
-    response_model=BaseResponse[NotificationSendResponse],
-    summary="알림 전송",
-    description="지정된 사용자들에게 푸시 알림을 전송합니다.",
-)
-async def send_notification(
-    notification_data: NotificationSendRequest,
-    session: Annotated[Session, Depends(get_session)],
-):
-    """알림 전송"""
-    notification_service = NotificationService(session)
-    result = await notification_service.send_notification(notification_data)
-    return BaseResponse(
-        success=True,
-        message=f"알림 전송 완료 (성공: {result.success_count}, 실패: {result.failure_count})",
-        data=result,
-    )
-
-
 @router.post(
     "/diary-reminder",
-    response_model=BaseResponse[NotificationSendResponse],
+    response_model=SendNotificationResponse,
     summary="[관리자/테스트] 다이어리 작성 알림 수동 전송",
     description="테스트 또는 관리 목적으로 현재 사용자에게 다이어리 작성 알림을 수동 전송합니다. 일반적으로는 개인화된 스케줄러에 의해 자동 발송됩니다.",
 )
 async def send_diary_reminder_manual(
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    session: Annotated[Session, Depends(get_session)],
+    db: DbSession,
+    user_id: CurrentUserId,
 ):
     """다이어리 작성 알림 수동 전송 (관리자/테스트용)
 
@@ -177,25 +165,27 @@ async def send_diary_reminder_manual(
     실제 운영에서는 개인화된 스케줄러(diary_reminder_scheduler.py)에 의해
     사용자별 설정 시간에 맞춰 자동으로 알림이 발송됩니다.
     """
-    notification_service = NotificationService(session)
-    result = await notification_service.send_diary_reminder(user_id)
-    return BaseResponse(
-        success=True,
+    fcm_service = get_fcm_service()
+    notification_service = NotificationService(db, fcm_service)
+
+    data = await notification_service.send_diary_reminder(user_id)
+
+    return SendNotificationResponse(
+        data=data,
         message="다이어리 작성 알림이 수동으로 전송되었습니다. (테스트/관리용)",
-        data=result,
     )
 
 
 @router.post(
     "/ai-content-ready/{diary_id}",
-    response_model=BaseResponse[NotificationSendResponse],
+    response_model=SendNotificationResponse,
     summary="[관리자/테스트] AI 콘텐츠 준비 완료 알림 수동 전송",
     description="테스트 또는 관리 목적으로 현재 사용자의 다이어리에 대한 AI 콘텐츠 생성 완료 알림을 수동 전송합니다. 일반적으로는 다이어리 생성 시 자동으로 발송됩니다.",
 )
 async def send_ai_content_ready_manual(
-    diary_id: str,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    session: Annotated[Session, Depends(get_session)],
+    db: DbSession,
+    user_id: CurrentUserId,
+    diary_id: UUID,
 ):
     """AI 콘텐츠 준비 완료 알림 수동 전송 (관리자/테스트용)
 
@@ -203,12 +193,14 @@ async def send_ai_content_ready_manual(
     실제 운영에서는 다이어리 생성 시(DiaryService.create_diary)에 의해
     자동으로 알림이 발송됩니다.
     """
-    notification_service = NotificationService(session)
-    result = await notification_service.send_ai_content_ready(user_id, diary_id)
-    return BaseResponse(
-        success=True,
+    fcm_service = get_fcm_service()
+    notification_service = NotificationService(db, fcm_service)
+
+    data = await notification_service.send_ai_content_ready(user_id, diary_id)
+
+    return SendNotificationResponse(
         message="AI 콘텐츠 준비 완료 알림이 수동으로 전송되었습니다. (테스트/관리용)",
-        data=result,
+        data=data,
     )
 
 
@@ -217,21 +209,25 @@ async def send_ai_content_ready_manual(
 
 @router.get(
     "/history",
-    response_model=BaseResponse[list[NotificationHistoryResponse]],
+    response_model=NotificationHistoryResponse,
     summary="알림 이력 조회",
     description="현재 사용자의 알림 전송 이력을 조회합니다.",
 )
 def get_notification_history(
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    session: Annotated[Session, Depends(get_session)],
+    db: DbSession,
+    user_id: CurrentUserId,
     limit: int = Query(20, le=100, description="조회할 개수"),
     offset: int = Query(0, ge=0, description="건너뛸 개수"),
 ):
     """알림 이력 조회"""
-    notification_service = NotificationService(session)
-    history = notification_service.get_notification_history(user_id, limit, offset)
-    return BaseResponse(
-        success=True, message="알림 이력을 성공적으로 조회했습니다.", data=history
+    fcm_service = get_fcm_service()
+    notification_service = NotificationService(db, fcm_service)
+
+    data = notification_service.get_notification_history(user_id, limit, offset)
+
+    return NotificationHistoryResponse(
+        data=data,
+        message="알림 이력을 성공적으로 조회했습니다.",
     )
 
 
@@ -240,133 +236,47 @@ def get_notification_history(
 
 @router.patch(
     "/{notification_id}/read",
-    response_model=BaseResponse[dict],
+    response_model=MarkNotificationAsReadResponse,
     summary="알림 읽음 처리",
     description="알림을 읽음으로 표시하고 관련 히스토리도 동시에 업데이트합니다.",
 )
 async def mark_notification_as_read(
+    db: DbSession,
+    user_id: CurrentUserId,
     notification_id: UUID,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    session: Annotated[Session, Depends(get_session)],
 ):
     """알림 읽음 처리 - 양쪽 테이블 동기화"""
-    try:
-        # 1. notification 테이블 업데이트
-        notification_stmt = select(Notification).where(
-            Notification.id == notification_id, Notification.user_id == user_id
-        )
-        notification = session.execute(notification_stmt).scalar_one_or_none()
+    fcm_service = get_fcm_service()
+    notification_service = NotificationService(db, fcm_service)
 
-        if not notification:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="알림을 찾을 수 없습니다."
-            )
+    data = notification_service.mark_notification_as_read(user_id, notification_id)
 
-        # notification 읽음 처리
-        from datetime import datetime
-
-        notification.is_read = True
-        notification.read_at = datetime.now(UTC)
-
-        # 2. notification_history 테이블 업데이트
-        history_stmt = select(NotificationHistory).where(
-            NotificationHistory.notification_id == notification_id
-        )
-        histories = session.execute(history_stmt).scalars().all()
-
-        # history 레코드들의 opened_at 업데이트
-        for history in histories:
-            if not history.opened_at:
-                history.opened_at = datetime.now(UTC)
-
-        session.commit()
-
-        return BaseResponse(
-            success=True,
-            message="알림이 읽음으로 처리되었습니다.",
-            data={
-                "notification_id": str(notification_id),
-                "updated_histories": len(histories),
-                "read_at": notification.read_at.isoformat(),
-            },
-        )
-
-    except HTTPException:
-        session.rollback()
-        raise
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"알림 읽음 처리 중 오류가 발생했습니다: {str(e)}",
-        ) from e
+    return MarkNotificationAsReadResponse(
+        message="알림이 읽음으로 처리되었습니다.",
+        data=data,
+    )
 
 
 @router.patch(
     "/read-all",
-    response_model=BaseResponse[dict],
+    response_model=MarkNotificationsAsReadResponse,
     summary="모든 알림 읽음 처리",
     description="사용자의 모든 읽지 않은 알림을 읽음으로 표시합니다.",
 )
 async def mark_all_notifications_as_read(
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    session: Annotated[Session, Depends(get_session)],
+    db: DbSession,
+    user_id: CurrentUserId,
 ):
     """모든 알림 읽음 처리"""
-    try:
-        from datetime import datetime
+    fcm_service = get_fcm_service()
+    notification_service = NotificationService(db, fcm_service)
 
-        now = datetime.now(UTC)
+    data = notification_service.mark_all_notifications_as_read(user_id)
 
-        # 1. 모든 읽지 않은 notification 조회
-        unread_notifications_stmt = select(Notification).where(
-            Notification.user_id == user_id, Notification.is_read.is_(False)
-        )
-        unread_notifications = (
-            session.execute(unread_notifications_stmt).scalars().all()
-        )
-
-        if not unread_notifications:
-            return BaseResponse(
-                success=True,
-                message="읽지 않은 알림이 없습니다.",
-                data={"updated_count": 0},
-            )
-
-        # 2. notification 테이블 일괄 업데이트
-        notification_ids = [notif.id for notif in unread_notifications]
-        for notification in unread_notifications:
-            notification.is_read = True
-            notification.read_at = now
-
-        # 3. 관련 notification_history 업데이트
-        history_stmt = select(NotificationHistory).where(
-            NotificationHistory.notification_id.in_(notification_ids)
-        )
-        histories = session.execute(history_stmt).scalars().all()
-
-        for history in histories:
-            if not history.opened_at:
-                history.opened_at = now
-
-        session.commit()
-
-        return BaseResponse(
-            success=True,
-            message="모든 알림이 읽음으로 처리되었습니다.",
-            data={
-                "updated_notifications": len(unread_notifications),
-                "updated_histories": len(histories),
-                "read_at": now.isoformat(),
-            },
-        )
-
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"전체 알림 읽음 처리 중 오류가 발생했습니다: {str(e)}",
-        ) from e
+    return MarkNotificationsAsReadResponse(
+        message="모든 알림이 읽음으로 처리되었습니다.",
+        data=data,
+    )
 
 
 # ==================== 알림 삭제 ====================
@@ -374,50 +284,22 @@ async def mark_all_notifications_as_read(
 
 @router.delete(
     "/{notification_id}",
-    response_model=BaseResponse[dict],
+    response_model=DeleteNotificationResponse,
     summary="알림 삭제",
     description="지정된 알림을 삭제합니다 (관련 히스토리도 함께 정리).",
 )
 async def delete_notification(
+    db: DbSession,
+    user_id: CurrentUserId,
     notification_id: UUID,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    session: Annotated[Session, Depends(get_session)],
 ):
     """알림 삭제 처리"""
-    try:
-        # 1) 해당 사용자의 알림인지 확인
-        notification_stmt = select(Notification).where(
-            Notification.id == notification_id, Notification.user_id == user_id
-        )
-        notification = session.execute(notification_stmt).scalar_one_or_none()
+    fcm_service = get_fcm_service()
+    notification_service = NotificationService(db, fcm_service)
 
-        if not notification:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="알림을 찾을 수 없습니다."
-            )
+    data = notification_service.delete_notification(user_id, notification_id)
 
-        # 2) 관련 history 정리 (존재 시)
-        history_delete_stmt = delete(NotificationHistory).where(
-            NotificationHistory.notification_id == notification_id
-        )
-        session.execute(history_delete_stmt)
-
-        # 3) 알림 삭제
-        session.delete(notification)
-        session.commit()
-
-        return BaseResponse(
-            success=True,
-            message="알림이 삭제되었습니다.",
-            data={"notification_id": str(notification_id), "deleted": True},
-        )
-
-    except HTTPException:
-        session.rollback()
-        raise
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"알림 삭제 중 오류가 발생했습니다: {str(e)}",
-        ) from e
+    return DeleteNotificationResponse(
+        data=data,
+        message="알림이 삭제되었습니다.",
+    )
