@@ -62,6 +62,7 @@ class HandwritingToDiaryRequest(BaseModel):
     length: str = Field("medium", description="문단 길이 (short, medium, long)")
     user_emotion: str | None = Field(None, description="사용자가 선택한 감정 (happy, sad, angry, peaceful, unrest)")
     uploaded_images: list[dict] | None = Field(None, description="함께 저장할 이미지정보(옵션)")
+    save: bool = Field(True, description="다이어리를 실제로 저장할지 여부 (True: 저장, False: 미리보기만)")
 
     @field_validator("user_emotion")
     @classmethod
@@ -73,13 +74,13 @@ class HandwritingToDiaryRequest(BaseModel):
                 raise ValueError(f"감정은 {allowed_emotions} 중 하나여야 합니다. 입력된 값: {v}")
         return v
 
-@router.post("/handwriting/to-diary", response_model=BaseResponse[DiaryResponse])
+@router.post("/handwriting/to-diary", response_model=BaseResponse[dict])
 async def handwriting_to_diary(
     *,
     session: Annotated[Session, Depends(get_session)],
     user_id: Annotated[UUID, Depends(get_current_user_id)],
     body: HandwritingToDiaryRequest = Body(...)
-) -> BaseResponse[DiaryResponse]:
+) -> BaseResponse[dict]:
     """
     손글씨 이미지 URL 전달 시, OCR(텍스트추출)+AI 다이어리 자동생성까지 모두 처리
     """
@@ -127,28 +128,48 @@ async def handwriting_to_diary(
             ai_emotion = None
             keywords = None
 
-        # 다이어리 생성 - DiaryService 사용
-        diary_service = DiaryService(session)
-        diary_req = DiaryCreateRequest(
-            title=None,  # AI가 자동 생성
-            content=ai_generated_text,  # AI가 생성한 다이어리 텍스트
-            user_emotion=body.user_emotion,  # 사용자가 선택한 감정
-            ai_generated_text=ai_generated_text,  # AI가 생성한 텍스트
-            ocr_text=ocr_text,  # OCR 원본 텍스트
-            ai_emotion=ai_emotion,  # AI가 분석한 감정
-            ai_emotion_confidence=None,
-            keywords=keywords,
-            diary_date=None,
-            uploaded_images=body.uploaded_images if body.uploaded_images else [
-                {"original_url": body.image_url, "thumbnail_url": None, "mime_type": None, "file_size": None}
-            ]
-        )
+        # save 파라미터에 따른 처리 분기
+        if body.save:
+            # 다이어리 실제 저장
+            diary_service = DiaryService(session)
+            diary_req = DiaryCreateRequest(
+                title=None,  # AI가 자동 생성
+                content=ai_generated_text,  # AI가 생성한 다이어리 텍스트
+                user_emotion=body.user_emotion,  # 사용자가 선택한 감정
+                ai_generated_text=ai_generated_text,  # AI가 생성한 텍스트
+                ocr_text=ocr_text,  # OCR 원본 텍스트
+                ai_emotion=ai_emotion,  # AI가 분석한 감정
+                ai_emotion_confidence=None,
+                keywords=keywords,
+                diary_date=None,
+                uploaded_images=body.uploaded_images if body.uploaded_images else [
+                    {"original_url": body.image_url, "thumbnail_url": None, "mime_type": None, "file_size": None}
+                ]
+            )
 
-        logger.info(f"다이어리 저장 시작 - user_emotion: {body.user_emotion}, ai_emotion: {ai_emotion}")
-        created_diary = diary_service.create_diary(diary_req, user_id)
-        logger.info(f"다이어리 저장 완료 - diary_id: {created_diary.id}")
+            logger.info(f"다이어리 저장 시작 - user_emotion: {body.user_emotion}, ai_emotion: {ai_emotion}")
+            created_diary = diary_service.create_diary(diary_req, user_id)
+            logger.info(f"다이어리 저장 완료 - diary_id: {created_diary.id}")
 
-        return BaseResponse(data=DiaryResponse.model_validate(created_diary), message="손글씨 인식 후 다이어리 생성 완료")
+            return BaseResponse(data=DiaryResponse.model_validate(created_diary).model_dump(), message="손글씨 인식 후 다이어리 생성 완료")
+        else:
+            # 미리보기 데이터만 반환 (저장하지 않음)
+            preview_data = {
+                "ocr_text": ocr_text,
+                "ai_generated_text": ai_generated_text,
+                "ai_emotion": ai_emotion,
+                "keywords": keywords,
+                "user_emotion": body.user_emotion,
+                "style": body.style,
+                "length": body.length,
+                "image_url": body.image_url,
+                "uploaded_images": body.uploaded_images if body.uploaded_images else [
+                    {"original_url": body.image_url, "thumbnail_url": None, "mime_type": None, "file_size": None}
+                ]
+            }
+
+            logger.info("다이어리 미리보기 데이터 생성 완료 (저장하지 않음)")
+            return BaseResponse(data=preview_data, message="손글씨 인식 및 AI 다이어리 미리보기 생성 완료")
 
     except HTTPException:
         raise
