@@ -24,16 +24,7 @@ settings = get_settings()
 security = HTTPBearer()
 
 
-def get_db() -> Generator[Session, None, None]:
-    """데이터베이스 세션 의존성"""
-    db = get_session()
-    try:
-        return db
-    finally:
-        db.close()
-
-
-DbSession = Annotated[Session, Depends(get_db)]
+DbSession = Annotated[Session, Depends(get_session)]
 
 
 async def get_current_user_id(request: Request):
