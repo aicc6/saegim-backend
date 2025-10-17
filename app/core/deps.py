@@ -2,8 +2,9 @@
 의존성 주입 (Dependency Injection)
 """
 
+from collections.abc import Generator
 import logging
-from typing import Annotated, Generator
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
@@ -27,12 +28,15 @@ def get_db() -> Generator[Session, None, None]:
     """데이터베이스 세션 의존성"""
     db = get_session()
     try:
-        yield db
+        return db
     finally:
         db.close()
 
 
-async def get_current_user_id(request: Request) -> UUID:
+DbSession = Annotated[Session, Depends(get_db)]
+
+
+async def get_current_user_id(request: Request):
     """
     쿠키 또는 Bearer 토큰을 통해 현재 로그인한 사용자 ID 조회
     (소셜 로그인: 쿠키, 이메일 로그인: Bearer 토큰)
@@ -71,6 +75,9 @@ async def get_current_user_id(request: Request) -> UUID:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=ResponseMessages.AUTH_FAILED,
         )
+
+
+CurrentUserId = Annotated[UUID, Depends(get_current_user_id)]
 
 
 async def _extract_user_id(request: Request) -> UUID | None:
