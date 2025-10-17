@@ -3,7 +3,7 @@
 """
 
 import logging
-from typing import Generator
+from typing import Annotated, Generator
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
@@ -68,7 +68,8 @@ async def get_current_user_id(request: Request) -> UUID:
     except Exception as e:
         logger.error(f"인증 중 예외 발생: {e}")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=ResponseMessages.AUTH_FAILED
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ResponseMessages.AUTH_FAILED,
         )
 
 
@@ -120,7 +121,8 @@ async def _validate_user(user_id: UUID, db: Session) -> User:
     if not user.is_active:
         logger.error(f"비활성화된 계정: {user_id}")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=ResponseMessages.ACCOUNT_INACTIVE
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ResponseMessages.ACCOUNT_INACTIVE,
         )
 
     return user
@@ -162,5 +164,9 @@ async def get_current_user(
     except Exception as e:
         logger.error(f"인증 중 예외 발생: {e}")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=ResponseMessages.AUTH_FAILED
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ResponseMessages.AUTH_FAILED,
         )
+
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
