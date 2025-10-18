@@ -13,13 +13,14 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api import router as api_router
 from app.constants import HTTPHeaders
 from app.core.config import get_settings
 from app.core.env_config import load_env_file
 from app.core.lifespan import lifespan
+from app.exceptions.auth import DeletedAccountException
 from app.schemas.base import BaseResponse
 
 # 환경 변수 먼저 로드
@@ -94,9 +95,9 @@ app.openapi = custom_openapi
 # 미들웨어 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"]
-    if settings.is_development
-    else settings.cors_origins,  # 개발환경에서는 모든 origin 허용
+    allow_origins=(
+        ["*"] if settings.is_development else settings.cors_origins
+    ),  # 개발환경에서는 모든 origin 허용
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[
@@ -120,6 +121,16 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 # 전역 예외 핸들러
+@app.exception_handler(DeletedAccountException)
+async def deleted_account_exception_handler(
+    _request: Request, exception: DeletedAccountException
+):
+    logger.info(f"Deleted account exception handler caught: {exception}")
+    logger.info(exception.url)
+
+    return RedirectResponse(url=exception.url)
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Global exception handler caught: {exc}", exc_info=True)

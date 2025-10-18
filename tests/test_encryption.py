@@ -12,11 +12,6 @@ from app.utils.encryption import (
     DataEncryption,
     PasswordHasher,
     data_encryptor,
-    decrypt_data,
-    encrypt_data,
-    hash_password,
-    password_hasher,
-    verify_password,
 )
 
 
@@ -319,7 +314,7 @@ class TestGlobalFunctions:
     def test_hash_password_function(self):
         """전역 hash_password 함수 테스트"""
         password = "test_password"
-        hashed = hash_password(password)
+        hashed = PasswordHasher.hash_password(password)
 
         assert isinstance(hashed, str)
         assert hashed.startswith("$2b$")
@@ -327,10 +322,10 @@ class TestGlobalFunctions:
     def test_verify_password_function(self):
         """전역 verify_password 함수 테스트"""
         password = "test_password"
-        hashed = hash_password(password)
+        hashed = PasswordHasher.hash_password(password)
 
-        assert verify_password(password, hashed) is True
-        assert verify_password("wrong_password", hashed) is False
+        assert PasswordHasher.verify_password(password, hashed) is True
+        assert PasswordHasher.verify_password("wrong_password", hashed) is False
 
     def test_encrypt_data_function(self):
         """전역 encrypt_data 함수 테스트"""
@@ -361,11 +356,6 @@ class TestGlobalFunctions:
 class TestSingletonInstances:
     """싱글톤 인스턴스 테스트"""
 
-    def test_password_hasher_singleton(self):
-        """password_hasher 싱글톤 테스트"""
-        assert password_hasher is not None
-        assert isinstance(password_hasher, PasswordHasher)
-
     def test_data_encryptor_singleton(self):
         """data_encryptor 싱글톤 테스트"""
         assert data_encryptor is not None
@@ -377,14 +367,14 @@ class TestSingletonInstances:
         password = "consistency_test"
 
         # 전역 함수 사용
-        hashed1 = hash_password(password)
+        hashed1 = PasswordHasher.hash_password(password)
 
         # 싱글톤 인스턴스 직접 사용
-        hashed2 = password_hasher.hash_password(password)
+        hashed2 = PasswordHasher.hash_password(password)
 
         # 둘 다 검증되어야 함
-        assert verify_password(password, hashed1) is True
-        assert password_hasher.verify_password(password, hashed2) is True
+        assert PasswordHasher.verify_password(password, hashed1) is True
+        assert PasswordHasher.verify_password(password, hashed2) is True
 
 
 class TestEdgeCases:
@@ -395,16 +385,16 @@ class TestEdgeCases:
         # bcrypt는 72바이트 제한이 있지만, passlib는 4096바이트까지 허용
         long_password = "x" * 4000  # 4KB 비밀번호 (bcrypt 한계 내)
 
-        hashed = hash_password(long_password)
-        assert verify_password(long_password, hashed) is True
+        hashed = PasswordHasher.hash_password(long_password)
+        assert PasswordHasher.verify_password(long_password, hashed) is True
 
     def test_password_with_null_bytes(self):
         """null 바이트가 포함된 비밀번호 테스트"""
         password_with_null = "password\x00with\x00null"
 
         # bcrypt 라이브러리는 null 바이트를 허용하므로 정상 처리되어야 함
-        hashed = hash_password(password_with_null)
-        assert verify_password(password_with_null, hashed) is True
+        hashed = PasswordHasher.hash_password(password_with_null)
+        assert PasswordHasher.verify_password(password_with_null, hashed) is True
 
     def test_verify_password_invalid_hash(self):
         """잘못된 해시 형식으로 검증 테스트"""
@@ -412,7 +402,7 @@ class TestEdgeCases:
         invalid_hash = "invalid_hash_format"
 
         # 잘못된 해시는 False를 반환해야 함
-        assert verify_password(password, invalid_hash) is False
+        assert PasswordHasher.verify_password(password, invalid_hash) is False
 
     def test_needs_update_various_formats(self):
         """다양한 해시 형식에서 업데이트 필요성 테스트"""
@@ -473,7 +463,7 @@ class TestPerformance:
         password = "performance_test_password"
 
         start_time = time.time()
-        hash_password(password)
+        PasswordHasher.hash_password(password)
         end_time = time.time()
 
         # cost factor 12는 적당한 시간이 걸려야 함 (0.1초 이상, 5초 이하)

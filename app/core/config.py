@@ -1,13 +1,27 @@
 """애플리케이션 설정"""
 
 import os
+from enum import StrEnum
 from functools import lru_cache
-
-# 추가: 타입 힌팅과 안전한 캐스트를 위해 typing 임포트
 from typing import Any, cast
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
+
+
+class AppEnvironment(StrEnum):
+    """애플리케이션 환경을 문자열 Enum으로 정의"""
+
+    DEVELOPMENT = "development"
+    PRODUCTION = "production"
+
+
+class CookieSameSite(StrEnum):
+    """쿠키 SameSite 옵션을 문자열 Enum으로 정의"""
+
+    LAX = "lax"
+    STRICT = "strict"
+    NONE = "none"
 
 
 class Settings(BaseSettings):
@@ -17,7 +31,7 @@ class Settings(BaseSettings):
     app_name: str = "새김 - 감성 AI 다이어리"
     debug: bool = False
     version: str = "1.0.0"
-    environment: str = "development"
+    environment: AppEnvironment = AppEnvironment.DEVELOPMENT
 
     # 서버 설정
     host: str = "0.0.0.0"
@@ -117,10 +131,12 @@ class Settings(BaseSettings):
     fcm_max_retries: int = int(os.getenv("FCM_MAX_RETRIES", "3"))
     fcm_retry_delay: float = float(os.getenv("FCM_RETRY_DELAY", "0.1"))
 
-    # 쿠키 설정
+    # 쿠키 설정 (Enum으로 처리, env에서 문자열로 읽어들임)
     cookie_domain: str = os.getenv("COOKIE_DOMAIN", "localhost")
     cookie_secure: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
-    cookie_samesite: str = os.getenv("COOKIE_SAMESITE", "lax")
+    cookie_samesite: CookieSameSite = CookieSameSite(
+        os.getenv("COOKIE_SAMESITE", "lax")
+    )
     cookie_httponly: bool = os.getenv("COOKIE_HTTPONLY", "true").lower() == "true"
 
     @field_validator("allowed_hosts", mode="before")
@@ -153,15 +169,31 @@ class Settings(BaseSettings):
             return cast(list[str], v)
         return []
 
+    @field_validator("cookie_samesite", mode="before")
+    @classmethod
+    def parse_cookie_samesite(cls, v: Any) -> CookieSameSite:
+        """COOKIE_SAMESITE 환경변수를 CookieSameSite Enum으로 파싱"""
+        if isinstance(v, CookieSameSite):
+            return v
+        if isinstance(v, str):
+            val = v.strip().lower()
+            try:
+                return CookieSameSite(val)
+            except ValueError:
+                # 허용되지 않는 값이면 안전하게 기본값으로 폴백
+                return CookieSameSite.LAX
+        # 타입이 맞지 않으면 기본값 반환
+        return CookieSameSite.LAX
+
     @property
     def is_development(self) -> bool:
         """개발 환경인지 확인"""
-        return self.environment.lower() == "development"
+        return self.environment == AppEnvironment.DEVELOPMENT
 
     @property
     def is_production(self) -> bool:
         """운영 환경인지 확인"""
-        return self.environment.lower() == "production"
+        return self.environment == AppEnvironment.PRODUCTION
 
     @property
     def cors_origins(self) -> list[str]:
@@ -211,6 +243,11 @@ class Settings(BaseSettings):
             raise ValueError(
                 "ENCRYPTION_KEY는 보안을 위해 최소 32자 이상이어야 합니다."
             )
+
+    @property
+    def cookie_samesite_value(self) -> str:
+        """Enum을 사용하는 경우 문자열 값으로 반환(기존 코드 호환용)"""
+        return self.cookie_samesite.value
 
 
 @lru_cache

@@ -11,15 +11,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # ruff: noqa: E402
 from app.core.security import (
-    decode_access_token,
+    JWTHandler,
     security_service,
 )
 from app.utils.encryption import (
     DataEncryption,
+    PasswordHasher,
     decrypt_data,
     encrypt_data,
-    hash_password,
-    verify_password,
 )
 
 
@@ -32,14 +31,14 @@ def demo_password_hashing():
     password = "my_secure_password123!"
 
     # 해싱
-    hashed = hash_password(password)
+    hashed = PasswordHasher.hash_password(password)
     print(f"원본 비밀번호: {password}")
     print(f"해싱된 비밀번호: {hashed}")
     print(f"해시 길이: {len(hashed)} 문자")
 
     # 검증
-    is_valid = verify_password(password, hashed)
-    is_invalid = verify_password("wrong_password", hashed)
+    is_valid = PasswordHasher.verify_password(password, hashed)
+    is_invalid = PasswordHasher.verify_password("wrong_password", hashed)
 
     print(f"올바른 비밀번호 검증: {is_valid}")
     print(f"잘못된 비밀번호 검증: {is_invalid}")
@@ -134,7 +133,7 @@ def demo_jwt_tokens():
 
     # 토큰 디코딩
     try:
-        access_payload = decode_access_token(tokens["access_token"])
+        access_payload = JWTHandler.decode_token(tokens["access_token"])
         print("\n액세스 토큰 페이로드:")
         for key, value in access_payload.items():
             print(f"  {key}: {value}")
@@ -173,7 +172,7 @@ def demo_security_integration():
     print(f"  프로필: {user_data['profile']}")
 
     # 비밀번호 해싱
-    hashed_password = hash_password(user_data["password"])
+    hashed_password = PasswordHasher.hash_password(user_data["password"])
     user_data["password"] = hashed_password
 
     # 민감한 데이터 암호화
@@ -195,7 +194,9 @@ def demo_security_integration():
 
     # 로그인 시뮬레이션
     login_password = "secure_password123!"
-    is_valid_login = verify_password(login_password, user_data["password"])
+    is_valid_login = PasswordHasher.verify_password(
+        login_password, user_data["password"]
+    )
 
     print(f"\n3. 로그인 검증: {is_valid_login}")
 

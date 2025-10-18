@@ -5,7 +5,7 @@ bcrypt(cost factor: 12)와 AES-256-GCM 암호화 지원
 
 import base64
 import os
-from typing import Optional
+from typing import Any
 
 import bcrypt
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -22,7 +22,7 @@ class PasswordHasher:
     """비밀번호 해싱 클래스 (bcrypt)"""
 
     @staticmethod
-    def hash_password(password: str) -> str:
+    def hash_password(password: Any | None) -> str:
         """
         비밀번호를 bcrypt로 해싱 (cost factor: 12)
 
@@ -48,7 +48,9 @@ class PasswordHasher:
         return hashed.decode("utf-8")
 
     @staticmethod
-    def verify_password(plain_password: str, hashed_password: str | None) -> bool:
+    def verify_password(
+        plain_password: str | None, hashed_password: str | None
+    ) -> bool:
         """
         비밀번호 검증
 
@@ -108,7 +110,7 @@ class PasswordHasher:
 class DataEncryption:
     """민감 데이터 암호화 클래스 (AES-256-GCM)"""
 
-    def __init__(self, key: Optional[str] = None):
+    def __init__(self, key: str | None = None):
         """
         데이터 암호화 초기화
 
@@ -140,7 +142,7 @@ class DataEncryption:
             # 32바이트가 안 되면 패딩
             return key_bytes.ljust(32, b"\x00")
 
-    def encrypt(self, plaintext: str) -> str:
+    def encrypt(self, plaintext: Any | None) -> str:
         """
         데이터 암호화 (AES-256-GCM)
 
@@ -150,11 +152,11 @@ class DataEncryption:
         Returns:
             Base64 인코딩된 암호화 데이터 (nonce + ciphertext)
         """
-        if not plaintext:
-            return ""
-
         # None 값 체크
         if plaintext is None:
+            return ""
+
+        if not plaintext:
             return ""
 
         # 문자열 타입 체크
@@ -171,7 +173,7 @@ class DataEncryption:
         encrypted_data = nonce + ciphertext
         return base64.b64encode(encrypted_data).decode("utf-8")
 
-    def decrypt(self, encrypted_data: str) -> str:
+    def decrypt(self, encrypted_data: Any | None) -> str:
         """
         데이터 복호화
 
@@ -184,11 +186,11 @@ class DataEncryption:
         Raises:
             ValueError: 복호화 실패 시
         """
-        if not encrypted_data:
-            return ""
-
         # None 값 체크
         if encrypted_data is None:
+            return ""
+
+        if not encrypted_data:
             return ""
 
         # 문자열 타입 체크
@@ -210,7 +212,9 @@ class DataEncryption:
         except Exception as e:
             raise ValueError(f"복호화 실패: {str(e)}")
 
-    def encrypt_dict(self, data: dict, fields_to_encrypt: list[str]) -> dict:
+    def encrypt_dict(
+        self, data: dict[str, Any], fields_to_encrypt: list[str]
+    ) -> dict[str, Any]:
         """
         딕셔너리의 특정 필드들을 암호화
 
@@ -229,7 +233,9 @@ class DataEncryption:
 
         return encrypted_data
 
-    def decrypt_dict(self, data: dict, fields_to_decrypt: list[str]) -> dict:
+    def decrypt_dict(
+        self, data: dict[str, Any], fields_to_decrypt: list[str]
+    ) -> dict[str, Any]:
         """
         딕셔너리의 특정 필드들을 복호화
 
@@ -256,33 +262,6 @@ class DataEncryption:
 # 전역 인스턴스 (싱글톤 패턴)
 password_hasher = PasswordHasher()
 data_encryptor = DataEncryption()
-
-
-def hash_password(password: str) -> str:
-    """
-    비밀번호 해싱 (전역 함수)
-
-    Args:
-        password: 평문 비밀번호
-
-    Returns:
-        해싱된 비밀번호
-    """
-    return password_hasher.hash_password(password)
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    비밀번호 검증 (전역 함수)
-
-    Args:
-        plain_password: 평문 비밀번호
-        hashed_password: 해싱된 비밀번호
-
-    Returns:
-        검증 결과
-    """
-    return password_hasher.verify_password(plain_password, hashed_password)
 
 
 def encrypt_data(plaintext: str) -> str:

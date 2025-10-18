@@ -3,7 +3,7 @@
 HTTPException 중복 제거 및 일관된 에러 응답 제공
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import HTTPException, status
 
@@ -14,31 +14,35 @@ class ErrorFactory:
     # 인증 관련 에러
     @staticmethod
     def unauthorized(
-        message: str = "인증이 필요합니다", details: Optional[dict[str, Any]] = None
+        message: str = "인증이 필요합니다", details: dict[str, Any] | None = None
     ) -> HTTPException:
         """401 Unauthorized 에러 생성"""
         return HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"error": "UNAUTHORIZED", "message": message, "details": details}
-            if details
-            else message,
+            detail=(
+                {"error": "UNAUTHORIZED", "message": message, "details": details}
+                if details
+                else message
+            ),
         )
 
     @staticmethod
     def forbidden(
-        message: str = "접근 권한이 없습니다", details: Optional[dict[str, Any]] = None
+        message: str = "접근 권한이 없습니다", details: dict[str, Any] | None = None
     ) -> HTTPException:
         """403 Forbidden 에러 생성"""
         return HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"error": "FORBIDDEN", "message": message, "details": details}
-            if details
-            else message,
+            detail=(
+                {"error": "FORBIDDEN", "message": message, "details": details}
+                if details
+                else message
+            ),
         )
 
     @staticmethod
     def not_found(
-        resource: str = "리소스", resource_id: Optional[str] = None
+        resource: str = "리소스", resource_id: str | None = None
     ) -> HTTPException:
         """404 Not Found 에러 생성"""
         message = f"{resource}를 찾을 수 없습니다"
@@ -57,19 +61,21 @@ class ErrorFactory:
 
     @staticmethod
     def bad_request(
-        message: str = "잘못된 요청입니다", details: Optional[dict[str, Any]] = None
+        message: str = "잘못된 요청입니다", details: dict[str, Any] | None = None
     ) -> HTTPException:
         """400 Bad Request 에러 생성"""
         return HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "BAD_REQUEST", "message": message, "details": details}
-            if details
-            else message,
+            detail=(
+                {"error": "BAD_REQUEST", "message": message, "details": details}
+                if details
+                else message
+            ),
         )
 
     @staticmethod
     def internal_error(
-        message: str = "서버 내부 오류가 발생했습니다", error_code: Optional[str] = None
+        message: str = "서버 내부 오류가 발생했습니다", error_code: str | None = None
     ) -> HTTPException:
         """500 Internal Server Error 생성"""
         return HTTPException(
@@ -83,7 +89,7 @@ class ErrorFactory:
 
     @staticmethod
     def validation_error(
-        field: str, message: str, value: Optional[Any] = None
+        field: str, message: str, value: Any | None = None
     ) -> HTTPException:
         """422 Validation Error 생성"""
         return HTTPException(
@@ -116,7 +122,7 @@ class AuthenticationErrors:
         return ErrorFactory.unauthorized("토큰이 만료되었습니다")
 
     @staticmethod
-    def user_not_found(user_id: Optional[str] = None) -> HTTPException:
+    def user_not_found(user_id: str | None = None) -> HTTPException:
         """사용자 없음 에러"""
         return ErrorFactory.not_found("사용자", user_id)
 
@@ -137,7 +143,7 @@ class OAuthErrors:
     """OAuth 관련 표준 에러들"""
 
     @staticmethod
-    def token_request_failed(details: Optional[str] = None) -> HTTPException:
+    def token_request_failed(details: str | None = None) -> HTTPException:
         """토큰 요청 실패"""
         return ErrorFactory.bad_request(
             "액세스 토큰 요청에 실패했습니다", {"details": details} if details else None

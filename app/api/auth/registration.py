@@ -8,7 +8,7 @@ import logging
 from fastapi import APIRouter
 
 from app.core.config import get_settings
-from app.core.deps import DbSession
+from app.core.deps import AuthServiceDep
 from app.schemas.auth import (
     EmailVerificationConfirmRequest,
     EmailVerificationRequest,
@@ -16,8 +16,6 @@ from app.schemas.auth import (
     SignupRequest,
 )
 from app.schemas.base import BaseResponse, MessageResponse
-from app.services.auth_service import AuthService
-from app.utils.email_service import EmailService
 
 router = APIRouter(tags=["Registration"])
 settings = get_settings()
@@ -26,13 +24,10 @@ logger = logging.getLogger(__name__)
 
 @router.post("/signup", response_model=SignUpResponse)
 async def signup(
-    db: DbSession,
+    auth_service: AuthServiceDep,
     request: SignupRequest,
 ):
     """이메일 회원가입 API"""
-    email_service = EmailService()
-    auth_service = AuthService(db, email_service)
-
     data = await auth_service.sign_up(request)
 
     return SignUpResponse(
@@ -43,13 +38,10 @@ async def signup(
 
 @router.get("/check-email/{email}")
 async def check_email_availability(
-    db: DbSession,
+    auth_service: AuthServiceDep,
     email: str,
 ):
     """이메일 중복 확인 API"""
-    email_service = EmailService()
-    auth_service = AuthService(db, email_service)
-
     data = auth_service.check_email_availability(email)
 
     return BaseResponse(
@@ -60,13 +52,10 @@ async def check_email_availability(
 
 @router.get("/check-nickname/{nickname}")
 async def check_nickname_availability(
-    db: DbSession,
+    auth_service: AuthServiceDep,
     nickname: str,
 ):
     """닉네임 중복 확인 API"""
-    email_service = EmailService()
-    auth_service = AuthService(db, email_service)
-
     data = auth_service.check_nickname_availability(nickname)
 
     return BaseResponse(
@@ -77,14 +66,11 @@ async def check_nickname_availability(
 
 @router.post("/send-verification-email", response_model=MessageResponse)
 async def send_verification_email(
-    db: DbSession,
+    auth_service: AuthServiceDep,
     request: EmailVerificationRequest,
 ):
     """이메일 인증 코드 발송 API"""
     logger.info(f"인증 코드 발송 요청 시작: {request.email}")
-    email_service = EmailService()
-    auth_service = AuthService(db, email_service)
-
     data = await auth_service.send_verification_email(request)
 
     return MessageResponse(
@@ -95,13 +81,10 @@ async def send_verification_email(
 
 @router.post("/verify-email", response_model=MessageResponse)
 async def verify_email(
-    db: DbSession,
+    auth_service: AuthServiceDep,
     request: EmailVerificationConfirmRequest,
 ):
     """이메일 인증 코드 확인 API"""
-    email_service = EmailService()
-    auth_service = AuthService(db, email_service)
-
     data = auth_service.verify_email(request)
 
     return MessageResponse(

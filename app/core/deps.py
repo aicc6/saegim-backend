@@ -12,12 +12,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.security import decode_access_token, get_current_user_id_from_cookie
+from app.core.security import (
+    JWTHandler,
+    get_current_user_id_from_cookie,
+)
 from app.constants import AuthConstants, ResponseMessages
 from app.db.database import get_session
 from app.models.user import User
+from app.services.auth_service import AuthService
 from app.services.cleanup_service import CleanupService
 from app.services.notification_service import NotificationService
+from app.services.oauth import GoogleOAuthService
 from app.services.support_service import SupportService
 from app.utils.email_service import EmailService
 from app.utils.fcm_push import FCMPushService, get_fcm_service
@@ -95,7 +100,7 @@ async def _extract_user_id(request: Request) -> UUID | None:
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith(AuthConstants.BEARER_PREFIX):
         token = auth_header.split(" ")[1]
-        payload = decode_access_token(token)
+        payload = JWTHandler.decode_token(token)
         sub = payload.get("sub")
         assert sub is not None, "토큰에 사용자 ID(sub)가 포함되어 있지 않음"
         logger.debug("Bearer 토큰에서 user_id 추출 성공")
@@ -204,3 +209,21 @@ def cleanup_service(db: DbSession):
 
 
 CleanupServiceDep = Annotated[CleanupService, Depends(cleanup_service)]
+
+
+def google_oauth_service(db: DbSession):
+    return GoogleOAuthService(db)
+
+
+GoogleOAuthServiceDep = Annotated[GoogleOAuthService, Depends(google_oauth_service)]
+
+
+def auth_service(
+    db: DbSession,
+    email_service: EmailServiceDep,
+    google_oauth_service: GoogleOAuthServiceDep,
+):
+    return AuthService(db, email_service, google_oauth_service)
+
+
+AuthServiceDep = Annotated[AuthService, Depends(auth_service)]

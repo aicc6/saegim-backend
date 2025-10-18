@@ -1,8 +1,13 @@
 import logging
 
+from fastapi import HTTPException
+
+from app.core.config import get_settings
+
 from .base import BusinessException
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class AuthServiceException(BusinessException):
@@ -94,3 +99,25 @@ class MismatchedVerificationCodeException(AuthServiceException):
             detail=detail,
             error_code="MISMATCHED_VERIFICATION_CODE",
         )
+
+
+class DeletedAccountException(HTTPException):
+    def __init__(
+        self,
+        email: str,
+        days_remaining: int | None = None,
+    ):
+        logger.debug("Attempt to access a deleted account.")
+        restore_available = days_remaining is not None
+        message = (
+            "탈퇴된 계정입니다. 30일 이내에 복구할 수 있습니다."
+            if restore_available
+            else "탈퇴 후 30일이 경과되어 복구할 수 없습니다."
+        )
+        url = (
+            f"{settings.frontend_callback_url}?error=account_deleted&email={email}&message={message}&restore_available={str(restore_available).lower()}"
+            + f"&days_remaining={days_remaining}"
+            if days_remaining
+            else ""
+        )
+        self.url = url

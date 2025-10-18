@@ -5,12 +5,12 @@ JWT 토큰 생성/검증, 의존성 주입
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import Any
 from uuid import UUID
 
 import jwt
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import HTTPException, Request, status
+from fastapi.security import HTTPBearer
 
 from app.constants import AuthConstants, ResponseMessages
 from app.core.config import get_settings
@@ -56,7 +56,9 @@ class JWTHandler:
         )
 
         return jwt.encode(
-            to_encode, settings.secret_key, algorithm=settings.jwt_algorithm
+            to_encode,
+            settings.secret_key,
+            algorithm=settings.jwt_algorithm,
         )
 
     @staticmethod
@@ -92,7 +94,9 @@ class JWTHandler:
         )
 
         return jwt.encode(
-            to_encode, settings.secret_key, algorithm=settings.jwt_algorithm
+            to_encode,
+            settings.secret_key,
+            algorithm=settings.jwt_algorithm,
         )
 
     @staticmethod
@@ -111,7 +115,9 @@ class JWTHandler:
         """
         try:
             payload = jwt.decode(
-                token, settings.secret_key, algorithms=[settings.jwt_algorithm]
+                token,
+                settings.secret_key,
+                algorithms=[settings.jwt_algorithm],
             )
             return payload
 
@@ -123,7 +129,7 @@ class JWTHandler:
                     AuthConstants.HEADER_WWW_AUTHENTICATE: AuthConstants.TOKEN_TYPE_BEARER
                 },
             ) from e
-        except jwt.JWTError as e:
+        except jwt.InvalidTokenError as e:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=ResponseMessages.INVALID_TOKEN,
@@ -243,46 +249,6 @@ class SecurityService:
 security_service = SecurityService()
 
 
-def get_current_user_id(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
-) -> UUID:
-    """
-    현재 사용자 ID 의존성
-
-    Args:
-        credentials: HTTP Bearer 인증 정보
-
-    Returns:
-        사용자 ID
-
-    Raises:
-        HTTPException: 인증 실패 시
-    """
-    token = credentials.credentials
-    payload = security_service.jwt_handler.decode_token(token)
-
-    if not security_service.jwt_handler.verify_token_type(payload, "access"):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="액세스 토큰이 아닙니다.",
-        )
-
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="유효하지 않은 토큰입니다.",
-        )
-
-    try:
-        return UUID(user_id)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="유효하지 않은 사용자 ID입니다.",
-        ) from e
-
-
 def get_current_user_id_from_cookie(
     request: Request,
 ) -> UUID:
@@ -308,7 +274,7 @@ def get_current_user_id_from_cookie(
         )
 
     try:
-        payload = decode_access_token(access_token)
+        payload = JWTHandler.decode_token(access_token)
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(
@@ -323,55 +289,3 @@ def get_current_user_id_from_cookie(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="토큰 검증에 실패했습니다.",
         ) from e
-
-
-def create_access_token(data: dict[str, Any]) -> str:
-    """
-    액세스 토큰 생성 (전역 함수)
-
-    Args:
-        data: 토큰 데이터
-
-    Returns:
-        JWT 액세스 토큰
-    """
-    return security_service.jwt_handler.create_access_token(data)
-
-
-def create_refresh_token(data: dict[str, Any]) -> str:
-    """
-    리프레시 토큰 생성 (전역 함수)
-
-    Args:
-        data: 토큰 데이터
-
-    Returns:
-        JWT 리프레시 토큰
-    """
-    return security_service.jwt_handler.create_refresh_token(data)
-
-
-def decode_access_token(token: str) -> dict[str, Any]:
-    """
-    액세스 토큰 디코딩 (전역 함수)
-
-    Args:
-        token: JWT 토큰
-
-    Returns:
-        토큰 페이로드
-    """
-    return security_service.jwt_handler.decode_token(token)
-
-
-def decode_refresh_token(token: str) -> dict[str, Any]:
-    """
-    리프레시 토큰 디코딩 (전역 함수)
-
-    Args:
-        token: JWT 리프레시 토큰
-
-    Returns:
-        토큰 페이로드
-    """
-    return security_service.jwt_handler.decode_token(token)
