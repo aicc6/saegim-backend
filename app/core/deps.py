@@ -2,7 +2,6 @@
 의존성 주입 (Dependency Injection)
 """
 
-from collections.abc import Generator
 import logging
 from typing import Annotated
 from uuid import UUID
@@ -17,6 +16,10 @@ from app.core.security import decode_access_token, get_current_user_id_from_cook
 from app.constants import AuthConstants, ResponseMessages
 from app.db.database import get_session
 from app.models.user import User
+from app.services.notification_service import NotificationService
+from app.services.support_service import SupportService
+from app.utils.email_service import EmailService
+from app.utils.fcm_push import FCMPushService, get_fcm_service
 
 logger = logging.getLogger(__name__)
 
@@ -92,9 +95,10 @@ async def _extract_user_id(request: Request) -> UUID | None:
     if auth_header and auth_header.startswith(AuthConstants.BEARER_PREFIX):
         token = auth_header.split(" ")[1]
         payload = decode_access_token(token)
-        user_id = payload.get("sub")
+        sub = payload.get("sub")
+        assert sub is not None, "토큰에 사용자 ID(sub)가 포함되어 있지 않음"
         logger.debug("Bearer 토큰에서 user_id 추출 성공")
-        return UUID(user_id)
+        return UUID(sub)
 
     return None
 
@@ -168,3 +172,27 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+# Services
+def email_service():
+    return EmailService()
+
+
+EmailServiceDep = Annotated[EmailService, Depends(email_service)]
+
+
+def support_service(email_service: EmailServiceDep):
+    return SupportService(email_service)
+
+
+SupportServiceDep = Annotated[SupportService, Depends(support_service)]
+
+FcmServiceDep = Annotated[FCMPushService, Depends(get_fcm_service)]
+
+
+def notification_service(db: DbSession, fcm_service: FcmServiceDep):
+    return NotificationService(db, fcm_service)
+
+
+NotificationServiceDep = Annotated[NotificationService, Depends(notification_service)]

@@ -56,6 +56,7 @@ from app.schemas.auth import (
     WithdrawRequest,
 )
 from app.schemas.base import BaseResponse
+from app.services.auth_service import AuthService
 from app.services.logout_service import LogoutService
 from app.utils.email_service import EmailService
 from app.utils.encryption import password_hasher

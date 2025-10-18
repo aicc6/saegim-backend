@@ -7,13 +7,11 @@ import logging
 
 from fastapi import APIRouter
 
-from app.core.deps import CurrentUser
+from app.core.deps import CurrentUser, SupportServiceDep
 from app.schemas.support import (
     CreateInquiryRequest,
     CreateInquiryResponse,
 )
-from app.services.support_service import SupportService
-from app.utils.email_service import EmailService
 
 router = APIRouter(tags=["Support"])
 logger = logging.getLogger(__name__)
@@ -25,6 +23,7 @@ logger = logging.getLogger(__name__)
     response_model=CreateInquiryResponse,
 )
 async def create_inquiry(
+    support_service: SupportServiceDep,
     current_user: CurrentUser,
     request: CreateInquiryRequest,
 ):
@@ -38,9 +37,6 @@ async def create_inquiry(
     Returns:
         문의 접수 결과
     """
-    email_service = EmailService()
-    support_service = SupportService(email_service)
-
     data = await support_service.create_inquiry(current_user, request)
 
     return CreateInquiryResponse(

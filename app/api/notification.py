@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, status
 
-from app.core.deps import CurrentUserId, DbSession
+from app.core.deps import CurrentUserId, NotificationServiceDep
 from app.schemas.base import StringResponse
 from app.schemas.notification import (
     DeleteNotificationResponse,
@@ -21,8 +21,6 @@ from app.schemas.notification import (
     RegisterFcmTokenResponse,
     SendNotificationResponse,
 )
-from app.services.notification_service import NotificationService
-from app.utils.fcm_push import get_fcm_service
 
 # Protected endpoints (auth required)
 router = APIRouter(tags=["Notifications"])
@@ -37,13 +35,11 @@ router = APIRouter(tags=["Notifications"])
     description="새로운 FCM 토큰을 등록하거나 기존 토큰을 업데이트합니다.",
 )
 def register_fcm_token(
-    db: DbSession,
+    notification_service: NotificationServiceDep,
     user_id: CurrentUserId,
     token_data: RegisterFcmTokenRequest,
 ):
     """FCM 토큰 등록"""
-    fcm_service = get_fcm_service()
-    notification_service = NotificationService(db, fcm_service)
 
     data = notification_service.register_token(user_id, token_data)
 
@@ -60,13 +56,10 @@ def register_fcm_token(
     description="현재 사용자의 활성 FCM 토큰 목록을 조회합니다.",
 )
 def get_fcm_tokens(
-    db: DbSession,
+    notification_service: NotificationServiceDep,
     user_id: CurrentUserId,
 ):
     """FCM 토큰 목록 조회"""
-    fcm_service = get_fcm_service()
-    notification_service = NotificationService(db, fcm_service)
-
     data = notification_service.get_user_tokens(user_id)
 
     return GetFcmTokensResponse(
@@ -82,14 +75,11 @@ def get_fcm_tokens(
     description="지정된 FCM 토큰을 삭제(비활성화)합니다.",
 )
 def delete_fcm_token(
-    db: DbSession,
+    notification_service: NotificationServiceDep,
     user_id: CurrentUserId,
     token_id: str,
 ):
     """FCM 토큰 삭제"""
-    fcm_service = get_fcm_service()
-    notification_service = NotificationService(db, fcm_service)
-
     notification_service.delete_token(user_id, token_id)
 
     data = "deleted"
@@ -110,13 +100,10 @@ def delete_fcm_token(
     description="현재 사용자의 알림 설정을 조회합니다.",
 )
 def get_notification_settings(
-    db: DbSession,
+    notification_service: NotificationServiceDep,
     user_id: CurrentUserId,
 ):
     """알림 설정 조회"""
-    fcm_service = get_fcm_service()
-    notification_service = NotificationService(db, fcm_service)
-
     data = notification_service.get_notification_settings(user_id)
 
     return NotificationSettingsResponse(
@@ -132,14 +119,11 @@ def get_notification_settings(
     description="사용자의 알림 설정을 업데이트합니다.",
 )
 def update_notification_settings(
-    db: DbSession,
+    notification_service: NotificationServiceDep,
     user_id: CurrentUserId,
     settings_data: NotificationSettingsUpdate,
 ):
     """알림 설정 업데이트"""
-    fcm_service = get_fcm_service()
-    notification_service = NotificationService(db, fcm_service)
-
     data = notification_service.update_notification_settings(user_id, settings_data)
 
     return NotificationSettingsResponse(
@@ -156,7 +140,7 @@ def update_notification_settings(
     description="테스트 또는 관리 목적으로 현재 사용자에게 다이어리 작성 알림을 수동 전송합니다. 일반적으로는 개인화된 스케줄러에 의해 자동 발송됩니다.",
 )
 async def send_diary_reminder_manual(
-    db: DbSession,
+    notification_service: NotificationServiceDep,
     user_id: CurrentUserId,
 ):
     """다이어리 작성 알림 수동 전송 (관리자/테스트용)
@@ -165,9 +149,6 @@ async def send_diary_reminder_manual(
     실제 운영에서는 개인화된 스케줄러(diary_reminder_scheduler.py)에 의해
     사용자별 설정 시간에 맞춰 자동으로 알림이 발송됩니다.
     """
-    fcm_service = get_fcm_service()
-    notification_service = NotificationService(db, fcm_service)
-
     data = await notification_service.send_diary_reminder(user_id)
 
     return SendNotificationResponse(
@@ -183,7 +164,7 @@ async def send_diary_reminder_manual(
     description="테스트 또는 관리 목적으로 현재 사용자의 다이어리에 대한 AI 콘텐츠 생성 완료 알림을 수동 전송합니다. 일반적으로는 다이어리 생성 시 자동으로 발송됩니다.",
 )
 async def send_ai_content_ready_manual(
-    db: DbSession,
+    notification_service: NotificationServiceDep,
     user_id: CurrentUserId,
     diary_id: UUID,
 ):
@@ -193,9 +174,6 @@ async def send_ai_content_ready_manual(
     실제 운영에서는 다이어리 생성 시(DiaryService.create_diary)에 의해
     자동으로 알림이 발송됩니다.
     """
-    fcm_service = get_fcm_service()
-    notification_service = NotificationService(db, fcm_service)
-
     data = await notification_service.send_ai_content_ready(user_id, diary_id)
 
     return SendNotificationResponse(
@@ -214,15 +192,12 @@ async def send_ai_content_ready_manual(
     description="현재 사용자의 알림 전송 이력을 조회합니다.",
 )
 def get_notification_history(
-    db: DbSession,
+    notification_service: NotificationServiceDep,
     user_id: CurrentUserId,
     limit: int = Query(20, le=100, description="조회할 개수"),
     offset: int = Query(0, ge=0, description="건너뛸 개수"),
 ):
     """알림 이력 조회"""
-    fcm_service = get_fcm_service()
-    notification_service = NotificationService(db, fcm_service)
-
     data = notification_service.get_notification_history(user_id, limit, offset)
 
     return NotificationHistoryResponse(
@@ -241,14 +216,11 @@ def get_notification_history(
     description="알림을 읽음으로 표시하고 관련 히스토리도 동시에 업데이트합니다.",
 )
 async def mark_notification_as_read(
-    db: DbSession,
+    notification_service: NotificationServiceDep,
     user_id: CurrentUserId,
     notification_id: UUID,
 ):
     """알림 읽음 처리 - 양쪽 테이블 동기화"""
-    fcm_service = get_fcm_service()
-    notification_service = NotificationService(db, fcm_service)
-
     data = notification_service.mark_notification_as_read(user_id, notification_id)
 
     return MarkNotificationAsReadResponse(
@@ -264,13 +236,10 @@ async def mark_notification_as_read(
     description="사용자의 모든 읽지 않은 알림을 읽음으로 표시합니다.",
 )
 async def mark_all_notifications_as_read(
-    db: DbSession,
+    notification_service: NotificationServiceDep,
     user_id: CurrentUserId,
 ):
     """모든 알림 읽음 처리"""
-    fcm_service = get_fcm_service()
-    notification_service = NotificationService(db, fcm_service)
-
     data = notification_service.mark_all_notifications_as_read(user_id)
 
     return MarkNotificationsAsReadResponse(
@@ -289,14 +258,11 @@ async def mark_all_notifications_as_read(
     description="지정된 알림을 삭제합니다 (관련 히스토리도 함께 정리).",
 )
 async def delete_notification(
-    db: DbSession,
+    notification_service: NotificationServiceDep,
     user_id: CurrentUserId,
     notification_id: UUID,
 ):
     """알림 삭제 처리"""
-    fcm_service = get_fcm_service()
-    notification_service = NotificationService(db, fcm_service)
-
     data = notification_service.delete_notification(user_id, notification_id)
 
     return DeleteNotificationResponse(
