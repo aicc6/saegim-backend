@@ -48,7 +48,7 @@ class PasswordHasher:
         return hashed.decode("utf-8")
 
     @staticmethod
-    def verify_password(plain_password: str, hashed_password: str) -> bool:
+    def verify_password(plain_password: str, hashed_password: str | None) -> bool:
         """
         비밀번호 검증
 

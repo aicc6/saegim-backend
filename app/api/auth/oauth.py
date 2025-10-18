@@ -11,11 +11,10 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.deps import DbSession
 from app.core.security import create_access_token, create_refresh_token
 from app.db.database import get_session
 from app.services.oauth import GoogleOAuthService
-
-from app.utils.error_handlers import StandardHTTPException, unauthorized_exception
 
 router = APIRouter(prefix="/google", tags=["Oauth"])
 settings = get_settings()
@@ -23,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/login")
-async def google_login() -> RedirectResponse:
+async def google_login():
     """구글 로그인 페이지로 리다이렉트"""
     params = {
         "client_id": settings.google_client_id,
@@ -38,9 +37,9 @@ async def google_login() -> RedirectResponse:
 
 @router.get("/callback")
 async def google_callback(
+    db: DbSession,
     code: str,
-    db: Session = Depends(get_session),
-) -> RedirectResponse:
+):
     """구글 OAuth 콜백 처리"""
     # 디버깅 로그
     if settings.is_development:
@@ -113,7 +112,9 @@ async def google_callback(
 
 
 def _set_oauth_cookies(
-    response: RedirectResponse, access_token: str, refresh_token: str
+    response: RedirectResponse,
+    access_token: str,
+    refresh_token: str,
 ):
     """OAuth 인증 쿠키 설정"""
     response.set_cookie(

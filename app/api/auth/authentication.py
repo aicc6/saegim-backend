@@ -3,13 +3,12 @@
 로그인, 로그아웃, 토큰 갱신, 사용자 정보 조회
 """
 
+import string
+import random
 import logging
-import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any
 from uuid import uuid4
-
-import jwt
 from fastapi import (
     APIRouter,
     Depends,
@@ -21,33 +20,48 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import JSONResponse
-from jose.exceptions import JWTError
-from pydantic import BaseModel, EmailStr, Field, field_validator
-from sqlalchemy import select, update
-from sqlalchemy.orm import Session
-
+from sqlalchemy import select, update, delete
 from app.constants import AccountType, OAuthProvider
 from app.core.config import get_settings
-from app.core.deps import get_current_user
+from app.core.deps import CurrentUser, DbSession, get_current_user
 from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_access_token,
     decode_refresh_token,
 )
-from app.db.database import get_session
 from app.models.diary import DiaryEntry
 from app.models.email_verification import EmailVerification
+from app.models.fcm import FCMToken, NotificationHistory, NotificationSettings
+from app.models.notification import Notification
 from app.models.oauth_token import OAuthToken
 from app.models.password_reset_token import PasswordResetToken
 from app.models.user import User
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    EmailChangeWithTokenRequest,
+    EmailVerificationRequest,
+    GoogleLoginRequest,
+    LoginRequest,
+    LoginResponse,
+    PasswordResetEmailRequest,
+    PasswordResetEmailResponse,
+    ProfileUpdateRequest,
+    ResetPasswordRequest,
+    RestoreRequest,
+    RestoreResponse,
+    SendRestoreEmailRequest,
+    VerifyPasswordRequest,
+    VerifyPasswordResetCodeRequest,
+    WithdrawRequest,
+)
 from app.schemas.base import BaseResponse
+from app.services.logout_service import LogoutService
 from app.utils.email_service import EmailService
 from app.utils.encryption import password_hasher
 from app.utils.minio_upload import upload_image_with_thumbnail_to_minio
 from app.utils.validators import validate_image_file
 
-from app.utils.error_handlers import StandardHTTPException, unauthorized_exception
 from app.services.google_id_token_service import GoogleIdTokenService
 
 
@@ -63,143 +77,11 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class LoginResponse(BaseModel):
-    user_id: str
-    email: str
-    nickname: str
-    message: str
-
-
-class ProfileUpdateRequest(BaseModel):
-    nickname: str = Field(min_length=1, max_length=50)
-    profile_image_url: Optional[str] = Field(None, max_length=500)
-
-
-# 비밀번호 재설정 관련 모델
-class PasswordResetEmailRequest(BaseModel):
-    email: EmailStr
-
-
-class PasswordResetEmailResponse(BaseModel):
-    success: bool
-    message: str
-    is_social_account: bool = False
-    email_sent: bool = False
-    redirect_to_error_page: bool = False
-
-
-class VerifyPasswordResetCodeRequest(BaseModel):
-    email: EmailStr
-    verification_code: str
-
-
-class ResetPasswordRequest(BaseModel):
-    email: EmailStr
-    verification_code: str
-    new_password: str
-
-    @field_validator("new_password")
-    @classmethod
-    def validate_password(cls, v):
-        if len(v) < 9:
-            raise ValueError("비밀번호는 9자 이상이어야 합니다")
-
-        # 영문, 숫자, 특수문자 포함 검증
-        if not re.match(
-            r"^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{9,}$", v
-        ):
-            raise ValueError("비밀번호는 영문, 숫자, 특수문자를 포함해야 합니다")
-
-        return v
-
-
-# 비밀번호 변경 관련 모델
-class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str
-
-    @field_validator("new_password")
-    @classmethod
-    def validate_new_password(cls, v):
-        # None 값 체크
-        if v is None:
-            raise ValueError("새 비밀번호는 필수입니다")
-
-        # 빈 문자열 체크
-        if not v or not isinstance(v, str):
-            raise ValueError("새 비밀번호는 유효한 문자열이어야 합니다")
-
-        if len(v) < 9:
-            raise ValueError("비밀번호는 9자 이상이어야 합니다")
-
-        # 영문, 숫자, 특수문자 포함 검증
-        if not re.match(
-            r"^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{9,}$", v
-        ):
-            raise ValueError("비밀번호는 영문, 숫자, 특수문자를 포함해야 합니다")
-
-        return v
-
-    @field_validator("current_password")
-    @classmethod
-    def validate_current_password(cls, v):
-        # None 값 체크
-        if v is None:
-            raise ValueError("현재 비밀번호는 필수입니다")
-
-        # 빈 문자열 체크
-        if not v or not isinstance(v, str):
-            raise ValueError("현재 비밀번호는 유효한 문자열이어야 합니다")
-
-        return v
-
-
-# 비밀번호 확인 전용 모델
-class VerifyPasswordRequest(BaseModel):
-    current_password: str
-
-    @field_validator("current_password")
-    @classmethod
-    def validate_current_password(cls, v):
-        # None 값 체크
-        if v is None:
-            raise ValueError("현재 비밀번호는 필수입니다")
-
-        # 빈 문자열 체크
-        if not v or not isinstance(v, str):
-            raise ValueError("현재 비밀번호는 유효한 문자열이어야 합니다")
-
-        return v
-
-
-# 계정 복구 관련 모델
-class SendRestoreEmailRequest(BaseModel):
-    email: str
-
-
-class RestoreRequest(BaseModel):
-    email: str
-    verification_code: str
-
-
-class RestoreResponse(BaseModel):
-    message: str
-    restored_at: datetime
-    user_id: str
-    email: str
-    nickname: str
-
-
 @router.post("/login", response_model=BaseResponse[LoginResponse])
 async def login(
+    db: DbSession,
     request: LoginRequest,
-    db: Session = Depends(get_session),
-) -> BaseResponse[LoginResponse]:
+):
     """이메일 로그인 API"""
     try:
         # 1. 사용자 조회 (Soft Delete 포함)
@@ -313,73 +195,12 @@ async def login(
         )
 
 
-class LogoutService:
-    """로그아웃 서비스"""
-
-    def __init__(self, db: Session):
-        self.db = db
-
-    async def revoke_google_token(self, access_token: str) -> bool:
-        """구글 OAuth 토큰 무효화"""
-        try:
-            import httpx
-
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "https://oauth2.googleapis.com/revoke",
-                    data={"token": access_token},
-                    timeout=10.0,
-                )
-                return response.status_code == 200
-        except Exception as e:
-            logger.warning(f"Google token revocation failed: {e}")
-            return False
-
-    def invalidate_oauth_tokens(self, user_id: str) -> None:
-        """사용자의 OAuth 토큰들을 무효화"""
-        try:
-            # 사용자의 OAuth 토큰 조회
-            stmt = select(OAuthToken).where(OAuthToken.user_id == user_id)
-            result = self.db.execute(stmt)
-            oauth_tokens = result.scalars().all()
-
-            for oauth_token in oauth_tokens:
-                # 토큰 만료 시간을 현재 시간으로 설정하여 무효화
-                oauth_token.expires_at = datetime.now(timezone.utc)
-
-            self.db.commit()
-            logger.info(
-                f"Invalidated {len(oauth_tokens)} OAuth tokens for user {user_id}"
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to invalidate OAuth tokens for user {user_id}: {e}")
-            self.db.rollback()
-
-    def log_logout_attempt(
-        self, user_id: str, success: bool, details: str = ""
-    ) -> None:
-        """로그아웃 시도 기록"""
-        try:
-            log_message = f"Logout attempt - User: {user_id}, Success: {success}"
-            if details:
-                log_message += f", Details: {details}"
-
-            if success:
-                logger.info(log_message)
-            else:
-                logger.warning(log_message)
-
-        except Exception as e:
-            logger.error(f"Failed to log logout attempt: {e}")
-
-
-@router.post("/logout", response_model=BaseResponse[Dict[str, Any]])
+@router.post("/logout", response_model=BaseResponse[dict[str, Any]])
 async def logout(
+    db: DbSession,
     request: Request,
     response: Response,
-    db: Session = Depends(get_session),
-) -> BaseResponse[Dict[str, Any]]:
+):
     """로그아웃 API - 구글 OAuth 세션 정리, JWT 토큰 무효화, 쿠키 정리"""
     logout_service = LogoutService(db)
     success = True
@@ -483,11 +304,11 @@ async def logout(
         )
 
 
-@router.post("/refresh", response_model=BaseResponse[Dict[str, Any]])
+@router.post("/refresh", response_model=BaseResponse[dict[str, Any]])
 async def refresh_token(
+    db: DbSession,
     request: Request,
-    db: Session = Depends(get_session),
-) -> BaseResponse[Dict[str, Any]]:
+):
     """JWT 토큰 갱신 API - Refresh Token을 사용하여 새로운 Access Token 발급"""
     try:
         # 1. 쿠키에서 Refresh Token 추출
@@ -568,11 +389,11 @@ async def refresh_token(
         )
 
 
-@authenticated_router.get("/me", response_model=BaseResponse[Dict[str, Any]])
+@authenticated_router.get("/me", response_model=BaseResponse[dict[str, Any]])
 async def get_current_user_info(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session),
-) -> BaseResponse[Dict[str, Any]]:
+    db: DbSession,
+    current_user: CurrentUser,
+):
     """현재 로그인한 사용자 정보 조회 API"""
     try:
         user_data = {
@@ -602,12 +423,12 @@ async def get_current_user_info(
         )
 
 
-@authenticated_router.put("/profile", response_model=BaseResponse[Dict[str, Any]])
+@authenticated_router.put("/profile", response_model=BaseResponse[dict[str, Any]])
 async def update_user_profile(
+    db: DbSession,
+    current_user: CurrentUser,
     request: ProfileUpdateRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session),
-) -> BaseResponse[Dict[str, Any]]:
+):
     """사용자 프로필 업데이트 API"""
     try:
         # 닉네임 업데이트
@@ -647,21 +468,21 @@ async def update_user_profile(
 
 # === 프로필 이미지 업로드 엔드포인트 ===
 @authenticated_router.post(
-    "/profile/upload-image", response_model=BaseResponse[Dict[str, Any]]
+    "/profile/upload-image", response_model=BaseResponse[dict[str, Any]]
 )
 async def upload_profile_image(
+    db: DbSession,
+    current_user: CurrentUser,
     *,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session),
     image: UploadFile = File(description="프로필 이미지 파일"),
-) -> BaseResponse[Dict[str, Any]]:
+):
     """프로필 이미지 업로드 API"""
     try:
         # 이미지 파일 검증
         validate_image_file(image.content_type, image.size)
 
         # MinIO에 이미지와 썸네일 업로드
-        file_id, original_url, thumbnail_url = (
+        file_id, _original_url, thumbnail_url = (
             await upload_image_with_thumbnail_to_minio(image)
         )
 
@@ -698,30 +519,16 @@ async def upload_profile_image(
 
 
 # === 이메일 변경 관련 엔드포인트 ===
-class EmailVerificationRequest(BaseModel):
-    new_email: EmailStr
-
-
-class EmailChangeWithTokenRequest(BaseModel):
-    new_email: EmailStr
-    password: str  # 기존 이메일 인증을 위한 비밀번호
-    token: str  # 이메일 인증 토큰
-
-
 @authenticated_router.post(
-    "/change-email/send-verification", response_model=BaseResponse[Dict[str, str]]
+    "/change-email/send-verification", response_model=BaseResponse[dict[str, str]]
 )
 async def send_email_change_verification(
+    db: DbSession,
+    current_user: CurrentUser,
     request: EmailVerificationRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session),
-) -> BaseResponse[Dict[str, str]]:
+):
     """이메일 변경을 위한 인증 URL 발송 API"""
     try:
-        import random
-        import string
-        from app.models.email_verification import EmailVerification
-        from app.utils.email_service import EmailService
 
         # 1. 새로운 이메일 중복 확인
         stmt = select(User).where(User.email == request.new_email)
@@ -800,13 +607,12 @@ async def send_email_change_verification(
 
 @router.get("/change-email/verify-token")
 async def verify_email_change_token(
+    db: DbSession,
     token: str,
-    email: str = None,
-    db: Session = Depends(get_session),
-) -> BaseResponse[Dict[str, Any]]:
+    email: str | None = None,
+):
     """이메일 변경 토큰 검증 API"""
     try:
-        from app.models.email_verification import EmailVerification
 
         # 1. 토큰 검증
         if email:
@@ -854,16 +660,15 @@ async def verify_email_change_token(
 
 
 @authenticated_router.post(
-    "/change-email/verify-password", response_model=BaseResponse[Dict[str, str]]
+    "/change-email/verify-password", response_model=BaseResponse[dict[str, str]]
 )
 async def verify_password_and_change_email(
+    db: DbSession,
+    current_user: CurrentUser,
     request: EmailChangeWithTokenRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session),
-) -> BaseResponse[Dict[str, str]]:
+):
     """토큰 검증 및 비밀번호 확인 후 이메일 변경 API"""
     try:
-        from app.models.email_verification import EmailVerification
 
         # 1. 이메일 회원가입 사용자인지 확인
         if current_user.account_type != AccountType.EMAIL.value:
@@ -943,28 +748,15 @@ async def verify_password_and_change_email(
 
 
 # === 계정 탈퇴 관련 엔드포인트 ===
-class WithdrawRequest(BaseModel):
-    password: str  # 이메일 계정의 경우 비밀번호 확인
-    reason: str = "기타"  # 탈퇴 이유
-    detailed_reason: str = None  # 상세 이유
-
-
-@authenticated_router.post("/withdraw", response_model=BaseResponse[Dict[str, Any]])
+@authenticated_router.post("/withdraw", response_model=BaseResponse[dict[str, Any]])
 async def withdraw_account(
+    db: DbSession,
+    current_user: CurrentUser,
     request: WithdrawRequest,
     response: Response,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session),
-) -> BaseResponse[Dict[str, Any]]:
+):
     """회원 탈퇴 API"""
     try:
-        from sqlalchemy import update, delete
-        from app.models.diary import DiaryEntry
-        from app.models.fcm import FCMToken, NotificationHistory, NotificationSettings
-        from app.models.notification import Notification
-        from app.models.oauth_token import OAuthToken
-        from app.models.email_verification import EmailVerification
-        from app.models.image import Image
 
         logger.info(f"탈퇴 요청 시작: {current_user.id}")
 
@@ -1049,48 +841,6 @@ async def withdraw_account(
         )
 
 
-# 헬퍼 함수들
-async def _get_user_from_request(request: Request, db: Session) -> User | None:
-    """요청에서 사용자 정보 추출 (Bearer token 또는 Cookie)"""
-    current_user = None
-
-    # 1. Authorization 헤더에서 Bearer 토큰 확인
-    auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header.split(" ")[1]
-        try:
-            payload = jwt.decode(
-                token, settings.secret_key, algorithms=[settings.jwt_algorithm]
-            )
-            user_id = payload.get("sub")
-            if user_id:
-                stmt = select(User).where(User.id == user_id)
-                result = db.execute(stmt)
-                current_user = result.scalar_one_or_none()
-        except JWTError:
-            pass
-
-    # 2. Bearer 토큰이 없거나 유효하지 않으면 쿠키 확인
-    if not current_user:
-        access_token = request.cookies.get("access_token")
-        if access_token:
-            try:
-                payload = jwt.decode(
-                    access_token,
-                    settings.secret_key,
-                    algorithms=[settings.jwt_algorithm],
-                )
-                user_id = payload.get("sub")
-                if user_id:
-                    stmt = select(User).where(User.id == user_id)
-                    result = db.execute(stmt)
-                    current_user = result.scalar_one_or_none()
-            except JWTError:
-                pass
-
-    return current_user
-
-
 def _set_auth_cookies(response: JSONResponse, access_token: str, refresh_token: str):
     """인증 쿠키 설정"""
     response.set_cookie(
@@ -1138,9 +888,9 @@ def _clear_auth_cookies(response: Response):
     "/forgot-password", response_model=BaseResponse[PasswordResetEmailResponse]
 )
 async def send_password_reset_email(
+    db: DbSession,
     request: PasswordResetEmailRequest,
-    db: Session = Depends(get_session),
-) -> BaseResponse[PasswordResetEmailResponse]:
+):
     """
     비밀번호 재설정 이메일 발송
 
@@ -1256,11 +1006,11 @@ async def send_password_reset_email(
         )
 
 
-@router.post("/forgot-password/verify", response_model=BaseResponse[Dict[str, Any]])
+@router.post("/forgot-password/verify", response_model=BaseResponse[dict[str, Any]])
 async def verify_password_reset_code(
+    db: DbSession,
     request: VerifyPasswordResetCodeRequest,
-    db: Session = Depends(get_session),
-) -> BaseResponse[Dict[str, Any]]:
+):
     """
     비밀번호 재설정 인증코드 확인
 
@@ -1322,11 +1072,11 @@ async def verify_password_reset_code(
         )
 
 
-@router.post("/forgot-password/reset", response_model=BaseResponse[Dict[str, str]])
+@router.post("/forgot-password/reset", response_model=BaseResponse[dict[str, str]])
 async def reset_password(
+    db: DbSession,
     request: ResetPasswordRequest,
-    db: Session = Depends(get_session),
-) -> BaseResponse[Dict[str, str]]:
+):
     """
     비밀번호 재설정
 
@@ -1401,16 +1151,14 @@ async def reset_password(
 # =============================================================================
 # 비밀번호 변경 관련 엔드포인트
 # =============================================================================
-
-
 @authenticated_router.post(
-    "/change-password", response_model=BaseResponse[Dict[str, str]]
+    "/change-password", response_model=BaseResponse[dict[str, str]]
 )
 async def change_password(
+    db: DbSession,
+    current_user: CurrentUser,
     request: ChangePasswordRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session),
-) -> BaseResponse[Dict[str, str]]:
+):
     """
     비밀번호 변경
 
@@ -1461,12 +1209,12 @@ async def change_password(
 
 
 @authenticated_router.post(
-    "/verify-password", response_model=BaseResponse[Dict[str, str]]
+    "/verify-password", response_model=BaseResponse[dict[str, str]]
 )
 async def verify_password(
+    current_user: CurrentUser,
     request: VerifyPasswordRequest,
-    current_user: User = Depends(get_current_user),
-) -> BaseResponse[Dict[str, str]]:
+):
     """
     현재 비밀번호 확인
 
@@ -1478,7 +1226,6 @@ async def verify_password(
         비밀번호 확인 결과
     """
     try:
-        from app.utils.encryption import password_hasher
 
         # 이메일 회원가입 사용자인지 확인
         if current_user.account_type != AccountType.EMAIL.value:
@@ -1516,11 +1263,11 @@ async def verify_password(
 # =============================================================================
 
 
-@router.post("/restore/send-restore-email", response_model=BaseResponse[Dict[str, str]])
+@router.post("/restore/send-restore-email", response_model=BaseResponse[dict[str, str]])
 async def send_restore_email(
+    db: DbSession,
     request: SendRestoreEmailRequest,
-    db: Session = Depends(get_session),
-) -> BaseResponse[Dict[str, str]]:
+):
     """
     복구 이메일 발송 API
 
@@ -1567,8 +1314,6 @@ async def send_restore_email(
             )
 
         # 3. 인증 코드 생성 (6자리 숫자)
-        import random
-
         verification_code = str(random.randint(100000, 999999))
 
         # 4. 기존 인증 코드가 있다면 만료 처리
@@ -1634,9 +1379,9 @@ async def send_restore_email(
 
 @router.post("/restore", response_model=BaseResponse[RestoreResponse])
 async def restore_account(
+    db: DbSession,
     request: RestoreRequest,
-    db: Session = Depends(get_session),
-) -> BaseResponse[RestoreResponse]:
+):
     """
     계정 복구 API
 
@@ -1755,24 +1500,12 @@ async def restore_account(
             detail="계정 복구 중 오류가 발생했습니다.",
         )
 
-class GoogleLoginRequest(BaseModel):
-    id_token: str = Field(min_length=10)
-    email: EmailStr
-    display_name: Optional[str] = Field(default=None, max_length=100)
-    photo_url: Optional[str] = Field(default=None, max_length=500)
-
-    @field_validator("id_token")
-    @classmethod
-    def validate_id_token(cls, value: str) -> str:
-        if not value or not value.strip():
-            raise ValueError("유효한 Google ID 토큰이 필요합니다.")
-        return value
 
 @router.post("/google-login", response_model=BaseResponse[LoginResponse])
 async def google_login_with_id_token(
+    db: DbSession,
     request: GoogleLoginRequest,
-    db: Session = Depends(get_session),
-) -> JSONResponse:
+):
     """Google ID 토큰을 이용한 모바일 로그인 엔드포인트"""
 
     try:

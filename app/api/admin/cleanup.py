@@ -2,12 +2,9 @@
 관리자용 데이터 정리 API
 """
 
-from typing import Annotated
+from fastapi import APIRouter, HTTPException, status
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-
-from app.core.deps import get_session
+from app.core.deps import DbSession
 from app.schemas.base import BaseResponse
 from app.services.cleanup_service import CleanupService
 
@@ -16,8 +13,8 @@ router = APIRouter(tags=["Admin"])
 
 @router.post("/cleanup/expired-data", response_model=BaseResponse[dict])
 async def cleanup_expired_data(
-    db: Annotated[Session, Depends(get_session)],
-) -> BaseResponse[dict]:
+    db: DbSession,
+):
     """
     30일 경과된 Soft Delete 데이터 영구 삭제 (관리자용)
 
@@ -44,8 +41,8 @@ async def cleanup_expired_data(
 
 @router.get("/cleanup/statistics", response_model=BaseResponse[dict])
 async def get_cleanup_statistics(
-    db: Annotated[Session, Depends(get_session)],
-) -> BaseResponse[dict]:
+    db: DbSession,
+):
     """
     Soft Delete 데이터 통계 조회 (관리자용)
 

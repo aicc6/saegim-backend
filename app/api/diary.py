@@ -5,26 +5,21 @@
 import logging
 from datetime import date
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import (
     APIRouter,
-    Depends,
+    Body,
     File,
     HTTPException,
     Path,
     Query,
     UploadFile,
     status,
-    Body,
 )
 from sqlalchemy import select
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
 
 from app.constants import SortOrder
-from app.core.deps import get_current_user_id
-from app.db.database import get_session
+from app.core.deps import CurrentUserId, DbSession
 from app.models.image import Image
 from app.schemas.base import BaseResponse
 from app.schemas.diary import (
@@ -32,60 +27,41 @@ from app.schemas.diary import (
     DiaryListResponse,
     DiaryResponse,
     DiaryUpdateRequest,
+    HandwritingToDiaryRequest,
 )
+from app.services.ai_log import AIService
 from app.services.diary import DiaryService
 from app.utils.error_handlers import ErrorPatterns, database_transaction_handler
 from app.utils.minio_upload import (
     get_minio_uploader,
     upload_image_with_thumbnail_to_minio,
 )
+from app.utils.openai_utils import handwriting_ocr_from_url
 from app.utils.validators import (
     extract_minio_object_key,
     validate_image_file,
     validate_uuid,
 )
-from app.utils.openai_utils import handwriting_ocr_from_url
-from app.schemas.diary import DiaryCreateRequest
-from app.services.ai_log import AIService
-
-from fastapi import Body
-from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Diary"])
 
 
-class HandwritingToDiaryRequest(BaseModel):
-    image_url: str = Field(..., description="손글씨 이미지의 원본 URL (MinIO 업로드 결과)")
-    style: str = Field("short_story", description="글쓰기 스타일 (short_story, poem 등)")
-    length: str = Field("medium", description="문단 길이 (short, medium, long)")
-    user_emotion: str | None = Field(None, description="사용자가 선택한 감정 (happy, sad, angry, peaceful, unrest)")
-    uploaded_images: list[dict] | None = Field(None, description="함께 저장할 이미지정보(옵션)")
-    save: bool = Field(True, description="다이어리를 실제로 저장할지 여부 (True: 저장, False: 미리보기만)")
-
-    @field_validator("user_emotion")
-    @classmethod
-    def validate_user_emotion(cls, v):
-        """사용자 감정 값 검증"""
-        if v is not None:
-            allowed_emotions = ["happy", "sad", "angry", "peaceful", "unrest"]
-            if v not in allowed_emotions:
-                raise ValueError(f"감정은 {allowed_emotions} 중 하나여야 합니다. 입력된 값: {v}")
-        return v
-
 @router.post("/handwriting/to-diary", response_model=BaseResponse[dict])
 async def handwriting_to_diary(
+    db: DbSession,
+    user_id: CurrentUserId,
     *,
-    session: Annotated[Session, Depends(get_session)],
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
-    body: HandwritingToDiaryRequest = Body(...)
-) -> BaseResponse[dict]:
+    body: HandwritingToDiaryRequest = Body(...),
+):
     """
     손글씨 이미지 URL 전달 시, OCR(텍스트추출)+AI 다이어리 자동생성까지 모두 처리
     """
     try:
-        logger.info(f"손글씨 OCR 시작 - user_id: {user_id}, image_url: {body.image_url}, user_emotion: {body.user_emotion}")
+        logger.info(
+            f"손글씨 OCR 시작 - user_id: {user_id}, image_url: {body.image_url}, user_emotion: {body.user_emotion}"
+        )
 
         # 사용자 감정 검증 로그
         if body.user_emotion:
@@ -100,15 +76,18 @@ async def handwriting_to_diary(
         if not ocr_text or len(ocr_text.strip()) < 2:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="손글씨 이미지에서 글씨를 인식하지 못했습니다. 이미지를 다시 확인해 주세요.")
+                detail="손글씨 이미지에서 글씨를 인식하지 못했습니다. 이미지를 다시 확인해 주세요.",
+            )
 
         # AI 서비스로 OCR 텍스트를 다이어리로 변환
-        ai_service = AIService(session)
+        ai_service = AIService(db)
 
         # AI 텍스트 생성 (비동기)
         logger.info("AI 다이어리 텍스트 생성 시작")
         generated_text = ""
-        async for text_chunk in ai_service._stream_complete_analysis(ocr_text, body.style, body.length):
+        async for text_chunk in ai_service._stream_complete_analysis(
+            ocr_text, body.style, body.length
+        ):
             if isinstance(text_chunk, dict) and "tokens_used" in text_chunk:
                 continue
             generated_text += text_chunk
@@ -119,7 +98,9 @@ async def handwriting_to_diary(
 
         # 감정 분석 및 키워드 추출
         try:
-            analysis_result = await ai_service._integrated_analysis(ocr_text, body.style, body.length)
+            analysis_result = await ai_service._integrated_analysis(
+                ocr_text, body.style, body.length
+            )
             ai_emotion = analysis_result["emotion"]
             keywords = analysis_result["keywords"]
             logger.info(f"감정 분석 완료: emotion='{ai_emotion}', keywords={keywords}")
@@ -131,7 +112,7 @@ async def handwriting_to_diary(
         # save 파라미터에 따른 처리 분기
         if body.save:
             # 다이어리 실제 저장
-            diary_service = DiaryService(session)
+            diary_service = DiaryService(db)
             diary_req = DiaryCreateRequest(
                 title=None,  # AI가 자동 생성
                 content=ai_generated_text,  # AI가 생성한 다이어리 텍스트
@@ -142,16 +123,30 @@ async def handwriting_to_diary(
                 ai_emotion_confidence=None,
                 keywords=keywords,
                 diary_date=None,
-                uploaded_images=body.uploaded_images if body.uploaded_images else [
-                    {"original_url": body.image_url, "thumbnail_url": None, "mime_type": None, "file_size": None}
-                ]
+                uploaded_images=(
+                    body.uploaded_images
+                    if body.uploaded_images
+                    else [
+                        {
+                            "original_url": body.image_url,
+                            "thumbnail_url": None,
+                            "mime_type": None,
+                            "file_size": None,
+                        }
+                    ]
+                ),
             )
 
-            logger.info(f"다이어리 저장 시작 - user_emotion: {body.user_emotion}, ai_emotion: {ai_emotion}")
+            logger.info(
+                f"다이어리 저장 시작 - user_emotion: {body.user_emotion}, ai_emotion: {ai_emotion}"
+            )
             created_diary = diary_service.create_diary(diary_req, user_id)
             logger.info(f"다이어리 저장 완료 - diary_id: {created_diary.id}")
 
-            return BaseResponse(data=DiaryResponse.model_validate(created_diary).model_dump(), message="손글씨 인식 후 다이어리 생성 완료")
+            return BaseResponse(
+                data=DiaryResponse.model_validate(created_diary).model_dump(),
+                message="손글씨 인식 후 다이어리 생성 완료",
+            )
         else:
             # 미리보기 데이터만 반환 (저장하지 않음)
             preview_data = {
@@ -163,29 +158,44 @@ async def handwriting_to_diary(
                 "style": body.style,
                 "length": body.length,
                 "image_url": body.image_url,
-                "uploaded_images": body.uploaded_images if body.uploaded_images else [
-                    {"original_url": body.image_url, "thumbnail_url": None, "mime_type": None, "file_size": None}
-                ]
+                "uploaded_images": (
+                    body.uploaded_images
+                    if body.uploaded_images
+                    else [
+                        {
+                            "original_url": body.image_url,
+                            "thumbnail_url": None,
+                            "mime_type": None,
+                            "file_size": None,
+                        }
+                    ]
+                ),
             }
 
             logger.info("다이어리 미리보기 데이터 생성 완료 (저장하지 않음)")
-            return BaseResponse(data=preview_data, message="손글씨 인식 및 AI 다이어리 미리보기 생성 완료")
+            return BaseResponse(
+                data=preview_data,
+                message="손글씨 인식 및 AI 다이어리 미리보기 생성 완료",
+            )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"손글씨 OCR/다이어리 생성 실패 - user_id: {user_id}, error: {str(e)}", exc_info=True)
+        logger.error(
+            f"손글씨 OCR/다이어리 생성 실패 - user_id: {user_id}, error: {str(e)}",
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"손글씨 인식 및 다이어리 생성 중 오류가 발생했습니다: {str(e)}"
+            detail=f"손글씨 인식 및 다이어리 생성 중 오류가 발생했습니다: {str(e)}",
         )
 
 
 @router.get("", response_model=BaseResponse[list[DiaryListResponse]])
 async def get_my_diaries(
+    db: DbSession,
+    user_id: CurrentUserId,
     *,
-    session: Annotated[Session, Depends(get_session)],
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
     page: Annotated[int, Query(ge=1, description="페이지 번호")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="페이지 크기")] = 20,
     searchTerm: Annotated[str | None, Query(description="제목/내용 통합 검색")] = None,
@@ -201,10 +211,10 @@ async def get_my_diaries(
         description="정렬 순서 (asc: 오름차순, desc: 내림차순)",
         regex="^(asc|desc)$",
     ),
-) -> BaseResponse[list[DiaryListResponse]]:
+):
     """JWT 인증된 사용자의 다이어리 목록 조회 (페이지네이션 포함)"""
 
-    diary_service = DiaryService(session)
+    diary_service = DiaryService(db)
     diaries, total_count = diary_service.get_diaries(
         user_id=user_id,  # JWT에서 추출한 사용자 ID 사용
         page=page,
@@ -224,17 +234,20 @@ async def get_my_diaries(
     )
 
 
-@router.get("/calendar", response_model=BaseResponse[list[DiaryListResponse]])
+@router.get(
+    "/calendar",
+    response_model=BaseResponse[list[DiaryListResponse]],
+)
 async def get_calendar_diaries(
+    db: DbSession,
+    user_id: CurrentUserId,
     *,
-    session: Annotated[Session, Depends(get_session)],
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
     start_date: Annotated[date, Query(description="시작 날짜 (YYYY-MM-DD)")],
     end_date: Annotated[date, Query(description="종료 날짜 (YYYY-MM-DD)")],
-) -> BaseResponse[list[DiaryListResponse]]:
+):
     """JWT 인증된 사용자의 캘린더용 다이어리 조회 (특정 날짜 범위)"""
 
-    diary_service = DiaryService(session)
+    diary_service = DiaryService(db)
     diaries = diary_service.get_diaries_by_date_range(
         user_id=user_id,  # JWT에서 추출한 사용자 ID 사용
         start_date=start_date,
@@ -250,19 +263,22 @@ async def get_calendar_diaries(
     )
 
 
-@router.get("/{diary_id}", response_model=BaseResponse[DiaryResponse])
+@router.get(
+    "/{diary_id}",
+    response_model=BaseResponse[DiaryResponse],
+)
 async def get_diary(
+    db: DbSession,
+    user_id: CurrentUserId,
     *,
-    session: Annotated[Session, Depends(get_session)],
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
     diary_id: str = Path(..., description="다이어리 ID (UUID)"),
-) -> BaseResponse[DiaryResponse]:
+):
     """JWT 인증된 사용자의 특정 다이어리 조회"""
 
     # UUID 형식 검증
     validate_uuid(diary_id, "다이어리 ID")
 
-    diary_service = DiaryService(session)
+    diary_service = DiaryService(db)
     diary = diary_service.get_diary_by_id(diary_id=diary_id, user_id=user_id)
 
     if not diary:
@@ -280,21 +296,24 @@ async def get_diary(
     )
 
 
-@router.post("/{diary_id}/upload-image", response_model=BaseResponse[dict])
+@router.post(
+    "/{diary_id}/upload-image",
+    response_model=BaseResponse[dict],
+)
 async def upload_diary_image(
+    db: DbSession,
+    user_id: CurrentUserId,
     *,
-    session: Annotated[Session, Depends(get_session)],
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
     diary_id: str = Path(..., description="다이어리 ID (UUID)"),
     image: Annotated[UploadFile, File(description="업로드할 이미지 파일")],
-) -> BaseResponse[dict]:
+):
     """다이어리에 이미지 업로드"""
 
     # UUID 형식 검증
     validate_uuid(diary_id, "다이어리 ID")
 
     # 다이어리 존재 여부 및 권한 확인
-    diary_service = DiaryService(session)
+    diary_service = DiaryService(db)
     diary = diary_service.get_diary_by_id(diary_id=diary_id, user_id=user_id)
 
     if not diary:
@@ -307,7 +326,7 @@ async def upload_diary_image(
     validate_image_file(image.content_type, image.size)
 
     with database_transaction_handler(
-        session,
+        db,
         ErrorPatterns.IMAGE_UPLOAD_FAILED,
         log_context=f"이미지 업로드 - diary_id: {diary_id}",
     ):
@@ -326,9 +345,9 @@ async def upload_diary_image(
             exif_removed=True,
         )
 
-        session.add(new_image)
-        session.commit()
-        session.refresh(new_image)
+        db.add(new_image)
+        db.commit()
+        db.refresh(new_image)
 
         return BaseResponse(
             data={
@@ -344,12 +363,12 @@ async def upload_diary_image(
 
 @router.delete("/{diary_id}/images/{image_id}")
 async def delete_diary_image(
+    db: DbSession,
+    user_id: CurrentUserId,
     *,
-    session: Annotated[Session, Depends(get_session)],
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
     diary_id: str = Path(..., description="다이어리 ID (UUID)"),
     image_id: str = Path(..., description="이미지 ID (UUID)"),
-) -> BaseResponse[dict]:
+):
     """다이어리 이미지 삭제"""
 
     # UUID 형식 검증
@@ -357,7 +376,7 @@ async def delete_diary_image(
     validate_uuid(image_id, "이미지 ID")
 
     # 다이어리 존재 여부 및 권한 확인
-    diary_service = DiaryService(session)
+    diary_service = DiaryService(db)
     diary = diary_service.get_diary_by_id(diary_id=diary_id, user_id=user_id)
 
     if not diary:
@@ -368,7 +387,7 @@ async def delete_diary_image(
 
     # 이미지 존재 여부 및 권한 확인
     stmt = select(Image).where(Image.id == image_id, Image.diary_id == diary_id)
-    result = session.execute(stmt)
+    result = db.execute(stmt)
     image = result.scalar_one_or_none()
 
     if not image:
@@ -378,7 +397,7 @@ async def delete_diary_image(
         )
 
     with database_transaction_handler(
-        session,
+        db,
         ErrorPatterns.IMAGE_DELETE_FAILED,
         log_context=f"이미지 삭제 - diary_id: {diary_id}, image_id: {image_id}",
     ):
@@ -398,8 +417,8 @@ async def delete_diary_image(
                 uploader.delete_image(thumbnail_object_key)
 
         # 데이터베이스에서 이미지 정보 삭제
-        session.delete(image)
-        session.commit()
+        db.delete(image)
+        db.commit()
 
         return BaseResponse(
             data={"message": "이미지 삭제 성공"},
@@ -407,20 +426,23 @@ async def delete_diary_image(
         )
 
 
-@router.get("/{diary_id}/images", response_model=BaseResponse[list[dict]])
+@router.get(
+    "/{diary_id}/images",
+    response_model=BaseResponse[list[dict]],
+)
 async def get_diary_images(
+    db: DbSession,
+    user_id: CurrentUserId,
     *,
-    session: Annotated[Session, Depends(get_session)],
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
     diary_id: str = Path(..., description="다이어리 ID (UUID)"),
-) -> BaseResponse[list[dict]]:
+):
     """다이어리의 기존 이미지들 조회"""
 
     # UUID 형식 검증
     validate_uuid(diary_id, "다이어리 ID")
 
     # 다이어리 존재 여부 및 권한 확인
-    diary_service = DiaryService(session)
+    diary_service = DiaryService(db)
     diary = diary_service.get_diary_by_id(diary_id=diary_id, user_id=user_id)
 
     if not diary:
@@ -431,7 +453,7 @@ async def get_diary_images(
 
     # 해당 다이어리의 이미지들 조회
     stmt = select(Image).where(Image.diary_id == diary_id)
-    result = session.execute(stmt)
+    result = db.execute(stmt)
     images = result.scalars().all()
 
     # 이미지 정보 반환
@@ -453,12 +475,15 @@ async def get_diary_images(
     )
 
 
-@router.post("/images/upload", response_model=BaseResponse[list[dict]])
+@router.post(
+    "/images/upload",
+    response_model=BaseResponse[list[dict]],
+)
 async def upload_temporary_images(
+    user_id: CurrentUserId,
     *,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
     images: Annotated[list[UploadFile], File(description="업로드할 이미지 파일들")],
-) -> BaseResponse[list[dict]]:
+):
     """AI 글 생성용 임시 이미지 업로드 (다이어리 저장 시 연결됨)"""
 
     if len(images) > 10:
@@ -507,10 +532,13 @@ async def upload_temporary_images(
     )
 
 
-@router.post("/handwriting/upload", response_model=BaseResponse[dict])
+@router.post(
+    "/handwriting/upload",
+    response_model=BaseResponse[dict],
+)
 async def upload_handwriting_image(
+    user_id: CurrentUserId,
     *,
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
     image: Annotated[UploadFile, File(description="손글씨 이미지 파일")],
 ) -> BaseResponse[dict]:
     """
@@ -532,7 +560,7 @@ async def upload_handwriting_image(
                 "file_size": image.size,
                 "filename": image.filename,
             },
-            message="손글씨 이미지 업로드 성공 (다음: 텍스트 추출 단계)"
+            message="손글씨 이미지 업로드 성공 (다음: 텍스트 추출 단계)",
         )
     except HTTPException:
         raise
@@ -544,16 +572,19 @@ async def upload_handwriting_image(
         )
 
 
-@router.post("", response_model=BaseResponse[DiaryResponse])
+@router.post(
+    "",
+    response_model=BaseResponse[DiaryResponse],
+)
 async def create_diary(
+    db: DbSession,
+    user_id: CurrentUserId,
     *,
-    session: Annotated[Session, Depends(get_session)],
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
     diary_create: DiaryCreateRequest,
-) -> BaseResponse[DiaryResponse]:
+):
     """JWT 인증된 사용자의 다이어리 생성"""
 
-    diary_service = DiaryService(session)
+    diary_service = DiaryService(db)
 
     # diary_id 변수 제거하고 diary_create와 user_id만 전달
     created_diary = diary_service.create_diary(diary_create, user_id)
@@ -563,20 +594,23 @@ async def create_diary(
     )
 
 
-@router.put("/{diary_id}", response_model=BaseResponse[DiaryResponse])
+@router.put(
+    "/{diary_id}",
+    response_model=BaseResponse[DiaryResponse],
+)
 async def update_diary(
+    db: DbSession,
+    user_id: CurrentUserId,
     *,
-    session: Annotated[Session, Depends(get_session)],
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
     diary_id: str = Path(..., description="다이어리 ID (UUID)"),
     diary_update: DiaryUpdateRequest,
-) -> BaseResponse[DiaryResponse]:
+):
     """JWT 인증된 사용자의 다이어리 수정"""
 
     # UUID 형식 검증
     validate_uuid(diary_id, "다이어리 ID")
 
-    diary_service = DiaryService(session)
+    diary_service = DiaryService(db)
 
     # 다이어리 존재 여부 및 권한을 한 번에 확인 (보안 강화)
     existing_diary = diary_service.get_diary_by_id(diary_id, user_id)
@@ -595,19 +629,22 @@ async def update_diary(
     )
 
 
-@router.delete("/{diary_id}", response_model=BaseResponse[dict])
+@router.delete(
+    "/{diary_id}",
+    response_model=BaseResponse[dict],
+)
 async def delete_diary(
+    db: DbSession,
+    user_id: CurrentUserId,
     *,
-    session: Annotated[Session, Depends(get_session)],
-    user_id: Annotated[UUID, Depends(get_current_user_id)],
     diary_id: str = Path(..., description="다이어리 ID (UUID)"),
-) -> BaseResponse[dict]:
+):
     """JWT 인증된 사용자의 다이어리 삭제 (Soft Delete)"""
 
     # UUID 형식 검증
     validate_uuid(diary_id, "다이어리 ID")
 
-    diary_service = DiaryService(session)
+    diary_service = DiaryService(db)
 
     # 다이어리 삭제 시도
     success = diary_service.delete_diary(diary_id=diary_id, user_id=user_id)

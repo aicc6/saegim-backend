@@ -3,10 +3,43 @@
 """
 
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
 from app.utils.validators import convert_uuid_to_string, parse_keywords_from_json
+
+
+class HandwritingToDiaryRequest(BaseModel):
+    image_url: str = Field(
+        ..., description="손글씨 이미지의 원본 URL (MinIO 업로드 결과)"
+    )
+    style: str = Field(
+        "short_story", description="글쓰기 스타일 (short_story, poem 등)"
+    )
+    length: str = Field("medium", description="문단 길이 (short, medium, long)")
+    user_emotion: str | None = Field(
+        None, description="사용자가 선택한 감정 (happy, sad, angry, peaceful, unrest)"
+    )
+    uploaded_images: list[dict] | None = Field(
+        None, description="함께 저장할 이미지정보(옵션)"
+    )
+    save: bool = Field(
+        True,
+        description="다이어리를 실제로 저장할지 여부 (True: 저장, False: 미리보기만)",
+    )
+
+    @field_validator("user_emotion")
+    @classmethod
+    def validate_user_emotion(cls, v: Any):
+        """사용자 감정 값 검증"""
+        if v is not None:
+            allowed_emotions = ["happy", "sad", "angry", "peaceful", "unrest"]
+            if v not in allowed_emotions:
+                raise ValueError(
+                    f"감정은 {allowed_emotions} 중 하나여야 합니다. 입력된 값: {v}"
+                )
+        return v
 
 
 class ImageResponse(BaseModel):
@@ -19,7 +52,7 @@ class ImageResponse(BaseModel):
 
     @field_validator("id", mode="before")
     @classmethod
-    def validate_uuid(cls, v):
+    def validate_uuid(cls, v: Any):
         """UUID를 문자열로 변환"""
         return convert_uuid_to_string(v)
 
@@ -48,13 +81,13 @@ class DiaryResponse(BaseModel):
 
     @field_validator("id", "user_id", mode="before")
     @classmethod
-    def validate_uuid(cls, v):
+    def validate_uuid(cls, v: Any):
         """UUID를 문자열로 변환"""
         return convert_uuid_to_string(v)
 
     @field_validator("keywords", mode="before")
     @classmethod
-    def parse_keywords(cls, v):
+    def parse_keywords(cls, v: Any):
         """keywords를 JSON 문자열에서 리스트로 변환"""
         return parse_keywords_from_json(v)
 
@@ -80,13 +113,13 @@ class DiaryListResponse(BaseModel):
 
     @field_validator("id", mode="before")
     @classmethod
-    def validate_uuid(cls, v):
+    def validate_uuid(cls, v: Any):
         """UUID를 문자열로 변환"""
         return convert_uuid_to_string(v)
 
     @field_validator("keywords", mode="before")
     @classmethod
-    def parse_keywords(cls, v):
+    def parse_keywords(cls, v: Any):
         """keywords를 JSON 문자열에서 리스트로 변환"""
         return parse_keywords_from_json(v)
 
@@ -109,14 +142,16 @@ class DiaryCreateRequest(BaseModel):
         None, ge=0.0, le=1.0, description="AI 감정 분석 신뢰도"
     )
     keywords: list[str] | None = Field(None, description="AI가 추출한 키워드")
-    diary_date: date | None = Field(None, description="다이어리 작성 날짜 (사용자가 선택한 날짜)")
+    diary_date: date | None = Field(
+        None, description="다이어리 작성 날짜 (사용자가 선택한 날짜)"
+    )
     uploaded_images: list[dict] | None = Field(
         None, description="업로드된 이미지 정보 (AI 생성 시)"
     )
 
     @field_validator("user_emotion", "ai_emotion")
     @classmethod
-    def validate_emotion(cls, v):
+    def validate_emotion(cls, v: Any):
         """감정 값 검증"""
         if v is not None:
             allowed_emotions = ["happy", "sad", "angry", "peaceful", "unrest"]
@@ -140,7 +175,7 @@ class DiaryUpdateRequest(BaseModel):
 
     @field_validator("keywords", mode="before")
     @classmethod
-    def parse_keywords(cls, v):
+    def parse_keywords(cls, v: Any):
         """keywords를 JSON 문자열에서 리스트로 변환"""
         return parse_keywords_from_json(v)
 

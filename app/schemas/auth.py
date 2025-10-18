@@ -1,9 +1,173 @@
 import re
+from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.schemas.base import BaseResponse
+
+
+# authentication
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class LoginResponse(BaseModel):
+    user_id: str
+    email: str
+    nickname: str
+    message: str
+
+
+class ProfileUpdateRequest(BaseModel):
+    nickname: str = Field(min_length=1, max_length=50)
+    profile_image_url: str | None = Field(None, max_length=500)
+
+
+# 비밀번호 재설정 관련 모델
+class PasswordResetEmailRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetEmailResponse(BaseModel):
+    success: bool
+    message: str
+    is_social_account: bool = False
+    email_sent: bool = False
+    redirect_to_error_page: bool = False
+
+
+class VerifyPasswordResetCodeRequest(BaseModel):
+    email: EmailStr
+    verification_code: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    verification_code: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, v: Any):
+        if len(v) < 9:
+            raise ValueError("비밀번호는 9자 이상이어야 합니다")
+
+        # 영문, 숫자, 특수문자 포함 검증
+        if not re.match(
+            r"^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{9,}$", v
+        ):
+            raise ValueError("비밀번호는 영문, 숫자, 특수문자를 포함해야 합니다")
+
+        return v
+
+
+# 비밀번호 변경 관련 모델
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: Any):
+        # None 값 체크
+        if v is None:
+            raise ValueError("새 비밀번호는 필수입니다")
+
+        # 빈 문자열 체크
+        if not v or not isinstance(v, str):
+            raise ValueError("새 비밀번호는 유효한 문자열이어야 합니다")
+
+        if len(v) < 9:
+            raise ValueError("비밀번호는 9자 이상이어야 합니다")
+
+        # 영문, 숫자, 특수문자 포함 검증
+        if not re.match(
+            r"^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{9,}$", v
+        ):
+            raise ValueError("비밀번호는 영문, 숫자, 특수문자를 포함해야 합니다")
+
+        return v
+
+    @field_validator("current_password")
+    @classmethod
+    def validate_current_password(cls, v: Any):
+        # None 값 체크
+        if v is None:
+            raise ValueError("현재 비밀번호는 필수입니다")
+
+        # 빈 문자열 체크
+        if not v or not isinstance(v, str):
+            raise ValueError("현재 비밀번호는 유효한 문자열이어야 합니다")
+
+        return v
+
+
+# 비밀번호 확인 전용 모델
+class VerifyPasswordRequest(BaseModel):
+    current_password: str
+
+    @field_validator("current_password")
+    @classmethod
+    def validate_current_password(cls, v: Any):
+        # None 값 체크
+        if v is None:
+            raise ValueError("현재 비밀번호는 필수입니다")
+
+        # 빈 문자열 체크
+        if not v or not isinstance(v, str):
+            raise ValueError("현재 비밀번호는 유효한 문자열이어야 합니다")
+
+        return v
+
+
+# 계정 복구 관련 모델
+class SendRestoreEmailRequest(BaseModel):
+    email: str
+
+
+class RestoreRequest(BaseModel):
+    email: str
+    verification_code: str
+
+
+class RestoreResponse(BaseModel):
+    message: str
+    restored_at: datetime
+    user_id: str
+    email: str
+    nickname: str
+
+
+class EmailVerificationRequest(BaseModel):
+    new_email: EmailStr = Field(..., alias="email")
+
+
+class EmailChangeWithTokenRequest(BaseModel):
+    new_email: EmailStr
+    password: str  # 기존 이메일 인증을 위한 비밀번호
+    token: str  # 이메일 인증 토큰
+
+
+class WithdrawRequest(BaseModel):
+    password: str  # 이메일 계정의 경우 비밀번호 확인
+    reason: str = "기타"  # 탈퇴 이유
+    detailed_reason: str | None = None  # 상세 이유
+
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str = Field(min_length=10)
+    email: EmailStr
+    display_name: str | None = Field(default=None, max_length=100)
+    photo_url: str | None = Field(default=None, max_length=500)
+
+    @field_validator("id_token")
+    @classmethod
+    def validate_id_token(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("유효한 Google ID 토큰이 필요합니다.")
+        return value
 
 
 # registration
@@ -65,10 +229,6 @@ class SignUpResponseData(BaseModel):
 
 class SignUpResponse(BaseResponse[SignUpResponseData]):
     pass
-
-
-class EmailVerificationRequest(BaseModel):
-    email: EmailStr
 
 
 class EmailVerificationConfirmRequest(BaseModel):
