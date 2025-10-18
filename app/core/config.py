@@ -2,6 +2,8 @@
 
 import os
 from functools import lru_cache
+
+# 추가: 타입 힌팅과 안전한 캐스트를 위해 typing 임포트
 from typing import Any, cast
 
 from pydantic import field_validator
@@ -51,13 +53,13 @@ class Settings(BaseSettings):
     minio_bucket_name: str = os.getenv("MINIO_BUCKET_NAME", "saegim")
 
     # CORS 설정 (환경변수에서 쉼표로 구분된 문자열을 리스트로 변환)
-    allowed_hosts: Any = os.getenv(
+    allowed_hosts: str | list[str] = os.getenv(
         "ALLOWED_HOSTS",
         "http://localhost:3000,http://localhost:3001,http://localhost:8080",
     )
 
     # 이미지 프록시 설정
-    image_proxy_allowed_domains: Any = os.getenv(
+    image_proxy_allowed_domains: str | list[str] = os.getenv(
         "IMAGE_PROXY_ALLOWED_DOMAINS",
         "",
     )
@@ -81,7 +83,9 @@ class Settings(BaseSettings):
     google_userinfo_uri: str = os.getenv(
         "GOOGLE_USERINFO_URI", "https://www.googleapis.com/oauth2/v2/userinfo"
     )
-    google_android_client_ids: Any = os.getenv("GOOGLE_ANDROID_CLIENT_IDS", "")
+    google_android_client_ids: str | list[str] = os.getenv(
+        "GOOGLE_ANDROID_CLIENT_IDS", ""
+    )
 
     # 프론트엔드 URL 설정
     frontend_url: str = os.getenv("FRONTEND_URL", "")
@@ -121,27 +125,33 @@ class Settings(BaseSettings):
 
     @field_validator("allowed_hosts", mode="before")
     @classmethod
-    def parse_allowed_hosts(cls, v):
+    def parse_allowed_hosts(cls, v: Any) -> list[str]:
         """ALLOWED_HOSTS 환경변수를 리스트로 파싱"""
         if isinstance(v, str):
             return [item.strip() for item in v.split(",") if item.strip()]
-        return v if isinstance(v, list) else []
+        if isinstance(v, list):
+            return cast(list[str], v)
+        return []
 
     @field_validator("image_proxy_allowed_domains", mode="before")
     @classmethod
-    def parse_image_proxy_allowed_domains(cls, v):
+    def parse_image_proxy_allowed_domains(cls, v: Any) -> list[str]:
         """IMAGE_PROXY_ALLOWED_DOMAINS 환경변수를 리스트로 파싱"""
         if isinstance(v, str):
             return [item.strip() for item in v.split(",") if item.strip()]
-        return v if isinstance(v, list) else []
+        if isinstance(v, list):
+            return cast(list[str], v)
+        return []
 
     @field_validator("google_android_client_ids", mode="before")
     @classmethod
-    def parse_google_android_client_ids(cls, v):
+    def parse_google_android_client_ids(cls, v: Any) -> list[str]:
         """안드로이드용 구글 클라이언트 ID 목록 파싱"""
         if isinstance(v, str):
             return [item.strip() for item in v.split(",") if item.strip()]
-        return v if isinstance(v, list) else []
+        if isinstance(v, list):
+            return cast(list[str], v)
+        return []
 
     @property
     def is_development(self) -> bool:
@@ -157,13 +167,17 @@ class Settings(BaseSettings):
     def cors_origins(self) -> list[str]:
         """CORS origins 반환"""
         # allowed_hosts가 field_validator로 처리되어 항상 list 타입임
-        return cast(list[str], self.allowed_hosts)
+        return self.allowed_hosts if isinstance(self.allowed_hosts, list) else []
 
     @property
     def image_proxy_domains(self) -> list[str]:
         """이미지 프록시 허용 도메인 반환"""
         # image_proxy_allowed_domains가 field_validator로 처리되어 항상 list 타입임
-        return cast(list[str], self.image_proxy_allowed_domains)
+        return (
+            self.image_proxy_allowed_domains
+            if isinstance(self.image_proxy_allowed_domains, list)
+            else []
+        )
 
     @property
     def google_allowed_audiences(self) -> list[str]:
@@ -179,7 +193,7 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": ".env", "case_sensitive": False, "extra": "ignore"}
 
-    def model_post_init(self, __context):
+    def model_post_init(self, __context: dict[str, Any]) -> None:
         """설정 초기화 후 필수 환경변수 검증"""
         if not self.secret_key:
             raise ValueError(
