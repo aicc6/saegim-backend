@@ -4,12 +4,11 @@
 
 from fastapi import APIRouter
 
-from app.core.deps import DbSession
+from app.core.deps import CleanupServiceDep
 from app.schemas.cleanup import (
     CleanupExpiredSoftDeletedDataResponse,
     GetSoftDeletedStatisticsResponse,
 )
-from app.services.cleanup_service import CleanupService
 
 router = APIRouter(tags=["Admin"])
 
@@ -19,7 +18,7 @@ router = APIRouter(tags=["Admin"])
     response_model=CleanupExpiredSoftDeletedDataResponse,
 )
 async def cleanup_expired_data(
-    db: DbSession,
+    cleanup_service: CleanupServiceDep,
 ):
     """
     30일 경과된 Soft Delete 데이터 영구 삭제 (관리자용)
@@ -30,8 +29,6 @@ async def cleanup_expired_data(
     Returns:
         삭제 결과 통계
     """
-    cleanup_service = CleanupService(db)
-
     data = cleanup_service.cleanup_expired_soft_deleted_data()
 
     return CleanupExpiredSoftDeletedDataResponse(
@@ -45,7 +42,7 @@ async def cleanup_expired_data(
     response_model=GetSoftDeletedStatisticsResponse,
 )
 async def get_cleanup_statistics(
-    db: DbSession,
+    cleanup_service: CleanupServiceDep,
 ):
     """
     Soft Delete 데이터 통계 조회 (관리자용)
@@ -56,8 +53,6 @@ async def get_cleanup_statistics(
     Returns:
         Soft Delete 데이터 통계
     """
-    cleanup_service = CleanupService(db)
-
     statistics = cleanup_service.get_soft_deleted_statistics()
 
     return GetSoftDeletedStatisticsResponse(

@@ -16,6 +16,7 @@ from app.core.security import decode_access_token, get_current_user_id_from_cook
 from app.constants import AuthConstants, ResponseMessages
 from app.db.database import get_session
 from app.models.user import User
+from app.services.cleanup_service import CleanupService
 from app.services.notification_service import NotificationService
 from app.services.support_service import SupportService
 from app.utils.email_service import EmailService
@@ -196,3 +197,10 @@ def notification_service(db: DbSession, fcm_service: FcmServiceDep):
 
 
 NotificationServiceDep = Annotated[NotificationService, Depends(notification_service)]
+
+
+def cleanup_service(db: DbSession):
+    return CleanupService(db)
+
+
+CleanupServiceDep = Annotated[CleanupService, Depends(cleanup_service)]
