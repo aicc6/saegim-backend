@@ -91,14 +91,18 @@ class AppVersionService(BaseService):
 
     async def check_app_version(self, request: CheckAppVersionRequest):
         # 최신 활성 버전 조회
-        latest_version = self._db.execute(
-            select(AppVersion)
-            .where(
-                AppVersion.platform == request.platform,
-                AppVersion.is_active == True,  # noqa: E712
+        latest_version = (
+            self._db.execute(
+                select(AppVersion)
+                .where(
+                    AppVersion.platform == request.platform,
+                    AppVersion.is_active == True,  # noqa: E712
+                )
+                .order_by(desc(AppVersion.created_at))
             )
-            .order_by(desc(AppVersion.created_at))
-        ).scalar_one_or_none()
+            .scalars()
+            .first()
+        )
 
         # 최신 버전이 없거나 현재 버전과 같으면 업데이트 불필요
         if not latest_version or latest_version.version_name == request.current_version:
@@ -130,14 +134,18 @@ class AppVersionService(BaseService):
         )
 
     async def get_latest_version(self, platform: str):
-        latest_version = self._db.execute(
-            select(AppVersion)
-            .where(
-                AppVersion.platform == platform,
-                AppVersion.is_active == True,  # noqa: E712
+        latest_version = (
+            self._db.execute(
+                select(AppVersion)
+                .where(
+                    AppVersion.platform == platform,
+                    AppVersion.is_active == True,  # noqa: E712
+                )
+                .order_by(desc(AppVersion.created_at))
             )
-            .order_by(desc(AppVersion.created_at))
-        ).scalar_one_or_none()
+            .scalars()
+            .first()
+        )
         if not latest_version:
             raise LatestVersionNotFoundException(
                 platform=platform,
