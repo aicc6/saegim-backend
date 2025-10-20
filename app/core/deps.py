@@ -11,15 +11,15 @@ from fastapi.security import HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.constants import AuthConstants, ResponseMessages
 from app.core.config import get_settings
 from app.core.security import (
     JWTHandler,
     get_current_user_id_from_cookie,
 )
-from app.constants import AuthConstants, ResponseMessages
 from app.db.database import get_session
 from app.models.user import User
-from app.services.ai_log import AIService
+from app.services.ai_service import AIService
 from app.services.auth_service import AuthService
 from app.services.cleanup_service import CleanupService
 from app.services.create_diary import CreateAIUsageLogService

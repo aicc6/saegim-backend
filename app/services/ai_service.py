@@ -488,20 +488,25 @@ class AIService(BaseService):
                 return
 
             # 현재 세션의 총 재생성 횟수 확인 (5회 제한)
-            session_logs_count = self._db.execute(
-                select(func.count(AIUsageLog.id))
-                .where(AIUsageLog.session_id == session_id)
-                .where(AIUsageLog.api_type == "integrated_analysis")
-            ).scalar()
+            session_logs_count = (
+                self._db.execute(
+                    select(func.count(AIUsageLog.id))
+                    .where(AIUsageLog.session_id == session_id)
+                    .where(AIUsageLog.api_type == "integrated_analysis")
+                ).scalar()
+                or 0
+            )
 
             if session_logs_count >= 5:
-                error_data = {
-                    "type": "error",
-                    "error": "재생성 횟수가 5회를 초과했습니다.",
-                    "session_id": session_id,
-                    "current_count": session_logs_count,
-                }
-                yield json.dumps(error_data, ensure_ascii=False)
+                yield json.dumps(
+                    {
+                        "type": "error",
+                        "error": "재생성 횟수가 5회를 초과했습니다.",
+                        "session_id": session_id,
+                        "current_count": session_logs_count,
+                    },
+                    ensure_ascii=False,
+                )
                 return
 
             # 이전 요청 데이터 복원
@@ -518,12 +523,14 @@ class AIService(BaseService):
             new_regeneration_count = session_logs_count + 1
 
             # 초기 메타데이터 전송
-            initial_data = {
-                "type": "start",
-                "session_id": session_id,
-                "regeneration_count": new_regeneration_count,
-            }
-            yield json.dumps(initial_data, ensure_ascii=False)
+            yield json.dumps(
+                {
+                    "type": "start",
+                    "session_id": session_id,
+                    "regeneration_count": new_regeneration_count,
+                },
+                ensure_ascii=False,
+            )
 
             # 스트리밍으로 텍스트 생성 (기존 stream_ai_text와 동일한 로직)
             collected_text = ""
@@ -598,16 +605,18 @@ class AIService(BaseService):
             self._db.commit()
 
             # 완료 메타데이터 전송
-            final_data = {
-                "type": "complete",
-                "emotion": emotion,
-                "keywords": keywords,
-                "generated_text": generated_text,
-                "tokens_used": total_tokens,
-                "session_id": session_id,
-                "regeneration_count": new_regeneration_count,
-            }
-            yield json.dumps(final_data, ensure_ascii=False)
+            yield json.dumps(
+                {
+                    "type": "complete",
+                    "emotion": emotion,
+                    "keywords": keywords,
+                    "generated_text": generated_text,
+                    "tokens_used": total_tokens,
+                    "session_id": session_id,
+                    "regeneration_count": new_regeneration_count,
+                },
+                ensure_ascii=False,
+            )
 
             logger.info(
                 f"재생성 스트리밍 완료: session_id={session_id}, tokens={total_tokens}"
@@ -800,8 +809,6 @@ class AIService(BaseService):
 </task>
 """
 
-            messages = [{"role": "user", "content": analysis_prompt}]
-
             # 재시도 로직 추가
             max_retries = 3
             retry_delay = 1
@@ -810,7 +817,7 @@ class AIService(BaseService):
                 try:
                     response = await self._openai_client.chat.completions.create(
                         model="gpt-4o-mini",
-                        messages=messages,
+                        messages=[{"role": "user", "content": analysis_prompt}],
                         max_completion_tokens=200,
                         temperature=0.3,  # 일관성 있는 분석을 위해 낮은 temperature 사용
                     )

@@ -168,7 +168,8 @@ async def health_check() -> BaseResponse[dict]:
     }
 
     return BaseResponse(
-        data=health_data, message="새김 백엔드가 정상적으로 실행 중입니다."
+        data=health_data,
+        message="새김 백엔드가 정상적으로 실행 중입니다.",
     )
 
 

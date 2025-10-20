@@ -644,19 +644,6 @@ class AuthService(BaseService):
                 reset_url=reset_url,
             )
 
-            # CHECK: 확인 필요
-            # if not email_sent:
-            #     return BaseResponse(
-            #         success=False,
-            #         data=SendPasswordResetEmailResponseData(
-            #             success=False,
-            #             message="이메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.",
-            #             is_social_account=False,
-            #             email_sent=False,
-            #         ),
-            #         message="이메일 발송에 실패했습니다.",
-            #     )
-
         return SendPasswordResetEmailResponseData(
             success=True,
             message="비밀번호 재설정 이메일을 발송했습니다.",

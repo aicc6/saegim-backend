@@ -149,15 +149,13 @@ class DiaryReminderScheduler:
                     try:
                         # 중복 발송 체크
                         if not await DiaryReminderScheduler.should_send_reminder(
-                            str(user.id), session
+                            user.id, session
                         ):
                             skip_count += 1
                             continue
 
                         # 알림 발송
-                        result = await NotificationService.send_diary_reminder(
-                            str(user.id), session
-                        )
+                        result = await NotificationService.send_diary_reminder(user.id)
 
                         if result.success_count > 0:
                             success_count += 1
