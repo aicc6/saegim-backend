@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from app.api.admin.cleanup import router as cleanup_router
 from app.api.ai import router as ai_router
+from app.api.app_version import router as app_version_router
 from app.api.auth.authentication import (
     authenticated_router as auth_authenticated_router,
 )
@@ -24,6 +25,7 @@ router.include_router(public_router, prefix="/api/public")
 router.include_router(ai_router, prefix="/api/ai")
 router.include_router(diary_router, prefix="/api/diary")
 router.include_router(notification_router, prefix="/api/notifications")
+router.include_router(app_version_router, prefix="/api/app-version")  # 앱 버전 관리 API
 router.include_router(legacy_router)  # 레거시 리다이렉트
 router.include_router(support_router, prefix="/api/support")  # 고객센터 API
 

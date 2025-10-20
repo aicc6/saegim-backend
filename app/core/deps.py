@@ -20,10 +20,12 @@ from app.core.security import (
 from app.db.database import get_session
 from app.models.user import User
 from app.services.ai_service import AIService
+from app.services.app_version_service import AppVersionService
 from app.services.auth_service import AuthService
 from app.services.cleanup_service import CleanupService
 from app.services.create_diary import CreateAIUsageLogService
 from app.services.diary import DiaryService
+from app.services.minio_service import MinioService, get_minio_service
 from app.services.notification_service import NotificationService
 from app.services.oauth import GoogleOAuthService
 from app.services.support_service import SupportService
@@ -253,3 +255,12 @@ def diary_service(db: DbSession):
 
 
 DiaryServiceDep = Annotated[DiaryService, Depends(diary_service)]
+
+MinioServiceDep = Annotated[MinioService, Depends(get_minio_service)]
+
+
+def app_version_service(db: DbSession, minio_service: MinioServiceDep):
+    return AppVersionService(db, minio_service)
+
+
+AppVersionServiceDep = Annotated[AppVersionService, Depends(app_version_service)]
