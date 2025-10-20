@@ -5,7 +5,7 @@ OpenAI API 호출 유틸리티 함수
 import asyncio
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, cast
 
 from openai import (
     APIConnectionError,
@@ -26,8 +26,8 @@ class OpenAIConfig:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
         timeout: float = 60.0,
         max_retries: int = 3,
         default_model: str = "gpt-4o-mini",
@@ -41,13 +41,15 @@ class OpenAIConfig:
         self.temperature = temperature
 
         if not self.api_key:
-            raise ValueError("OpenAI API 키가 설정되지 않았습니다. OPENAI_API_KEY 환경변수를 확인하세요.")
+            raise ValueError(
+                "OpenAI API 키가 설정되지 않았습니다. OPENAI_API_KEY 환경변수를 확인하세요."
+            )
 
 
 class OpenAIClient:
     """OpenAI 클라이언트 래퍼 클래스"""
 
-    def __init__(self, config: Optional[OpenAIConfig] = None):
+    def __init__(self, config: OpenAIConfig | None = None):
         self.config = config or OpenAIConfig()
         self.client = OpenAI(
             api_key=self.config.api_key,
@@ -64,12 +66,12 @@ class OpenAIClient:
 
     def chat_completion(
         self,
-        messages: List[ChatCompletionMessageParam],
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_completion_tokens: Optional[int] = None,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        messages: list[ChatCompletionMessageParam],
+        model: str | None = None,
+        temperature: float | None = None,
+        max_completion_tokens: int | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """
         채팅 완성 API 호출
 
@@ -85,22 +87,19 @@ class OpenAIClient:
         """
         try:
             # gpt-5 모델은 temperature=1만 지원하므로 기본값일 때는 파라미터를 생략
-            create_params = {
-                "model": model or self.config.default_model,
-                "messages": messages,
-                "max_completion_tokens": max_completion_tokens,
-                **kwargs,
-            }
-
-            # temperature 파라미터 처리 (gpt-5는 기본값 1만 지원)
-            target_temp = (
-                temperature if temperature is not None else self.config.temperature
-            )
-            if target_temp != 1.0:  # 기본값이 아닐 때만 추가
-                create_params["temperature"] = target_temp
-
-            response: ChatCompletion = self.client.chat.completions.create(
-                **create_params
+            response = cast(
+                ChatCompletion,
+                self.client.chat.completions.create(
+                    model=model or self.config.default_model,
+                    messages=messages,
+                    max_completion_tokens=max_completion_tokens,
+                    temperature=(
+                        temperature
+                        if temperature is not None
+                        else self.config.temperature
+                    ),
+                    **kwargs,
+                ),
             )
 
             return {
@@ -109,15 +108,15 @@ class OpenAIClient:
                 "model": response.model,
                 "created": response.created,
                 "usage": {
-                    "completion_tokens": response.usage.completion_tokens
-                    if response.usage
-                    else 0,
-                    "prompt_tokens": response.usage.prompt_tokens
-                    if response.usage
-                    else 0,
-                    "total_tokens": response.usage.total_tokens
-                    if response.usage
-                    else 0,
+                    "completion_tokens": (
+                        response.usage.completion_tokens if response.usage else 0
+                    ),
+                    "prompt_tokens": (
+                        response.usage.prompt_tokens if response.usage else 0
+                    ),
+                    "total_tokens": (
+                        response.usage.total_tokens if response.usage else 0
+                    ),
                 },
                 "finish_reason": response.choices[0].finish_reason,
                 "role": response.choices[0].message.role,
@@ -142,7 +141,7 @@ class OpenAIClient:
             logger.error(f"OpenAI chat completion 예상치 못한 오류: {str(e)}")
             raise
 
-    async def create_completion_async(self, **kwargs) -> Dict[str, Any]:
+    async def create_completion_async(self, **kwargs: Any) -> dict[str, Any]:
         """
         통합 비동기 완성 API 호출
 
@@ -156,22 +155,25 @@ class OpenAIClient:
             AIGenerationFailedException: OpenAI API 타임아웃 또는 기타 오류
         """
         try:
-            response = await self.async_client.chat.completions.create(**kwargs)
+            response = cast(
+                ChatCompletion,
+                await self.async_client.chat.completions.create(**kwargs),
+            )
             return {
                 "id": response.id,
                 "content": response.choices[0].message.content,
                 "model": response.model,
                 "created": response.created,
                 "usage": {
-                    "completion_tokens": response.usage.completion_tokens
-                    if response.usage
-                    else 0,
-                    "prompt_tokens": response.usage.prompt_tokens
-                    if response.usage
-                    else 0,
-                    "total_tokens": response.usage.total_tokens
-                    if response.usage
-                    else 0,
+                    "completion_tokens": (
+                        response.usage.completion_tokens if response.usage else 0
+                    ),
+                    "prompt_tokens": (
+                        response.usage.prompt_tokens if response.usage else 0
+                    ),
+                    "total_tokens": (
+                        response.usage.total_tokens if response.usage else 0
+                    ),
                 },
                 "finish_reason": response.choices[0].finish_reason,
                 "role": response.choices[0].message.role,
@@ -189,32 +191,31 @@ class OpenAIClient:
 
     async def async_chat_completion(
         self,
-        messages: List[ChatCompletionMessageParam],
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_completion_tokens: Optional[int] = None,
-        **kwargs,
-    ) -> Dict[str, Any]:
+        messages: list[ChatCompletionMessageParam],
+        model: str | None = None,
+        temperature: float | None = None,
+        max_completion_tokens: int | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """
         비동기 채팅 완성 API 호출 (타임아웃 처리 개선)
         """
         try:
             # gpt-5 모델은 temperature=1만 지원하므로 기본값일 때는 파라미터를 생략
-            create_params = {
-                "model": model or self.config.default_model,
-                "messages": messages,
-                "max_completion_tokens": max_completion_tokens,
-                **kwargs,
-            }
-
-            # temperature 파라미터 처리 (gpt-5는 기본값 1만 지원)
-            target_temp = (
-                temperature if temperature is not None else self.config.temperature
+            response = cast(
+                ChatCompletion,
+                await self.async_client.chat.completions.create(
+                    model=model or self.config.default_model,
+                    messages=messages,
+                    max_completion_tokens=max_completion_tokens,
+                    temperature=(
+                        temperature
+                        if temperature is not None
+                        else self.config.temperature
+                    ),
+                    **kwargs,
+                ),
             )
-            if target_temp != 1.0:  # 기본값이 아닐 때만 추가
-                create_params["temperature"] = target_temp
-
-            response = await self.async_client.chat.completions.create(**create_params)
 
             return {
                 "id": response.id,
@@ -222,23 +223,20 @@ class OpenAIClient:
                 "model": response.model,
                 "created": response.created,
                 "usage": {
-                    "completion_tokens": response.usage.completion_tokens
-                    if response.usage
-                    else 0,
-                    "prompt_tokens": response.usage.prompt_tokens
-                    if response.usage
-                    else 0,
-                    "total_tokens": response.usage.total_tokens
-                    if response.usage
-                    else 0,
+                    "completion_tokens": (
+                        response.usage.completion_tokens if response.usage else 0
+                    ),
+                    "prompt_tokens": (
+                        response.usage.prompt_tokens if response.usage else 0
+                    ),
+                    "total_tokens": (
+                        response.usage.total_tokens if response.usage else 0
+                    ),
                 },
                 "finish_reason": response.choices[0].finish_reason,
                 "role": response.choices[0].message.role,
             }
 
-        except asyncio.TimeoutError:
-            logger.error("OpenAI API 타임아웃 발생")
-            raise APITimeoutError("OpenAI API 타임아웃")
         except RateLimitError as e:
             logger.error(f"OpenAI API 요청 한도 초과: {str(e)}")
             raise
@@ -260,33 +258,27 @@ class OpenAIClient:
 
     def stream_chat_completion(
         self,
-        messages: List[ChatCompletionMessageParam],
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_completion_tokens: Optional[int] = None,
-        **kwargs,
+        messages: list[ChatCompletionMessageParam],
+        model: str | None = None,
+        temperature: float | None = None,
+        max_completion_tokens: int | None = None,
+        **kwargs: Any,
     ):
         """
         스트리밍 채팅 완성 API 호출
         """
         try:
             # gpt-5 모델은 temperature=1만 지원하므로 기본값일 때는 파라미터를 생략
-            create_params = {
-                "model": model or self.config.default_model,
-                "messages": messages,
-                "max_completion_tokens": max_completion_tokens,
-                "stream": True,
+            stream = self.client.chat.completions.create(
+                model=model or self.config.default_model,
+                messages=messages,
+                max_completion_tokens=max_completion_tokens,
+                stream=True,
+                temperature=(
+                    temperature if temperature is not None else self.config.temperature
+                ),
                 **kwargs,
-            }
-
-            # temperature 파라미터 처리 (gpt-5는 기본값 1만 지원)
-            target_temp = (
-                temperature if temperature is not None else self.config.temperature
             )
-            if target_temp != 1.0:  # 기본값이 아닐 때만 추가
-                create_params["temperature"] = target_temp
-
-            stream = self.client.chat.completions.create(**create_params)
 
             for chunk in stream:
                 if (
@@ -317,33 +309,26 @@ class OpenAIClient:
 
     async def async_stream_chat_completion(
         self,
-        messages: List[ChatCompletionMessageParam],
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_completion_tokens: Optional[int] = None,
-        **kwargs,
+        messages: list[ChatCompletionMessageParam],
+        model: str | None = None,
+        temperature: float | None = None,
+        max_completion_tokens: int | None = None,
+        **kwargs: Any,
     ):
         """
         비동기 스트리밍 채팅 완성 API 호출 (타임아웃 처리 개선)
         """
         try:
-            # gpt-5 모델은 temperature=1만 지원하므로 기본값일 때는 파라미터를 생략
-            create_params = {
-                "model": model or self.config.default_model,
-                "messages": messages,
-                "max_completion_tokens": max_completion_tokens,
-                "stream": True,
+            stream = await self.async_client.chat.completions.create(
+                model=model or self.config.default_model,
+                messages=messages,
+                max_completion_tokens=max_completion_tokens,
+                stream=True,
+                temperature=(
+                    temperature if temperature is not None else self.config.temperature
+                ),
                 **kwargs,
-            }
-
-            # temperature 파라미터 처리 (gpt-5는 기본값 1만 지원)
-            target_temp = (
-                temperature if temperature is not None else self.config.temperature
             )
-            if target_temp != 1.0:  # 기본값이 아닐 때만 추가
-                create_params["temperature"] = target_temp
-
-            stream = await self.async_client.chat.completions.create(**create_params)
 
             async for chunk in stream:
                 if (
@@ -353,9 +338,6 @@ class OpenAIClient:
                 ):
                     yield chunk.choices[0].delta.content
 
-        except asyncio.TimeoutError:
-            logger.error("OpenAI API 스트림 타임아웃 발생")
-            raise APITimeoutError("OpenAI API 타임아웃")
         except RateLimitError as e:
             logger.error(f"OpenAI API 요청 한도 초과: {str(e)}")
             raise
@@ -372,12 +354,14 @@ class OpenAIClient:
             logger.error(f"OpenAI API 오류: {str(e)}")
             raise
         except Exception as e:
-            logger.error(f"OpenAI async stream chat completion 예상치 못한 오류: {str(e)}")
+            logger.error(
+                f"OpenAI async stream chat completion 예상치 못한 오류: {str(e)}"
+            )
             raise
 
 
 # 전역 클라이언트 인스턴스
-_global_client: Optional[OpenAIClient] = None
+_global_client: OpenAIClient | None = None
 
 
 def get_openai_client() -> OpenAIClient:
@@ -390,21 +374,21 @@ def get_openai_client() -> OpenAIClient:
 
 # 편의 함수들
 def simple_chat(
-    message: str, model: Optional[str] = None, temperature: Optional[float] = None
+    message: str, model: str | None = None, temperature: float | None = None
 ) -> str:
     """간단한 채팅 API 호출"""
     client = get_openai_client()
-    messages: List[ChatCompletionMessageParam] = [{"role": "user", "content": message}]
+    messages: list[ChatCompletionMessageParam] = [{"role": "user", "content": message}]
     response = client.chat_completion(messages, model=model, temperature=temperature)
     return response["content"]
 
 
 async def simple_async_chat(
-    message: str, model: Optional[str] = None, temperature: Optional[float] = None
+    message: str, model: str | None = None, temperature: float | None = None
 ) -> str:
     """간단한 비동기 채팅 API 호출"""
     client = get_openai_client()
-    messages: List[ChatCompletionMessageParam] = [{"role": "user", "content": message}]
+    messages: list[ChatCompletionMessageParam] = [{"role": "user", "content": message}]
     response = await client.async_chat_completion(
         messages, model=model, temperature=temperature
     )
@@ -413,22 +397,24 @@ async def simple_async_chat(
 
 async def handwriting_ocr_from_url(image_url: str) -> str:
     """
-    GPT-4o Vision으로 이미지 URL의 손글씨를 OCR(텍스트 추출)합니다.
+    GPT-5 Vision으로 이미지 URL의 손글씨를 OCR(텍스트 추출)합니다.
     """
     client = get_openai_client()
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "이 손글씨 이미지에 적힌 모든 문장을 가능한 한 빠짐없이 추출해서 그대로 반환해 주세요."},
-                {"type": "image_url", "image_url": {"url": image_url}}
-            ]
-        }
-    ]
     response = await client.async_chat_completion(
-        messages,
-        model="gpt-4o",  # Vision 인식 지원 모델명
-        temperature=0.0,
-        max_completion_tokens=2048
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "이 손글씨 이미지에 적힌 모든 문장을 가능한 한 빠짐없이 추출해서 그대로 반환해 주세요.",
+                    },
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ],
+            }
+        ],
+        model="gpt-5",  # Vision 인식 지원 모델명
+        # temperature=0.0,
+        max_completion_tokens=2048,
     )
     return response["content"]
