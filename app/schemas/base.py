@@ -33,6 +33,18 @@ class MessageResponse(BaseResponse[MessageResponseData]):
     pass
 
 
+class HealthCheckResponseData(BaseModel):
+    status: str
+    app_name: str
+    version: str
+    environment: str
+    uptime: int
+
+
+class HealthCheckResponse(BaseResponse[HealthCheckResponseData]):
+    pass
+
+
 class PaginationInfo(BaseModel):
     """페이지네이션 정보"""
 

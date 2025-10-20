@@ -21,7 +21,7 @@ from app.core.config import get_settings
 from app.core.env_config import load_env_file
 from app.core.lifespan import lifespan
 from app.exceptions.auth import DeletedAccountException
-from app.schemas.base import BaseResponse
+from app.schemas.base import HealthCheckResponse, HealthCheckResponseData
 
 # 환경 변수 먼저 로드
 load_env_file()
@@ -156,18 +156,22 @@ def _get_uptime() -> int:
 
 
 # 통합 헬스체크 라우트
-@app.get("/", tags=["Health"], response_model=BaseResponse[dict])
-async def health_check() -> BaseResponse[dict]:
+@app.get(
+    "/",
+    tags=["Health"],
+    response_model=HealthCheckResponse,
+)
+async def health_check():
     """통합 헬스체크 엔드포인트 - 애플리케이션 상태 확인"""
-    health_data = {
-        "status": "healthy",
-        "app_name": settings.app_name,
-        "version": settings.version,
-        "environment": settings.environment,
-        "uptime": _get_uptime(),
-    }
+    health_data = HealthCheckResponseData(
+        status="healthy",
+        app_name=settings.app_name,
+        version=settings.version,
+        environment=settings.environment,
+        uptime=_get_uptime(),
+    )
 
-    return BaseResponse(
+    return HealthCheckResponse(
         data=health_data,
         message="새김 백엔드가 정상적으로 실행 중입니다.",
     )

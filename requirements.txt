@@ -61,3 +61,4 @@ python-json-logger==2.0.7
 # AI 관련
 openai==1.68.0
 json-repair==0.*
+types-psutil==7.0.0.20251001
