@@ -19,8 +19,11 @@ from app.core.security import (
 from app.constants import AuthConstants, ResponseMessages
 from app.db.database import get_session
 from app.models.user import User
+from app.services.ai_log import AIService
 from app.services.auth_service import AuthService
 from app.services.cleanup_service import CleanupService
+from app.services.create_diary import CreateAIUsageLogService
+from app.services.diary import DiaryService
 from app.services.notification_service import NotificationService
 from app.services.oauth import GoogleOAuthService
 from app.services.support_service import SupportService
@@ -227,3 +230,26 @@ def auth_service(
 
 
 AuthServiceDep = Annotated[AuthService, Depends(auth_service)]
+
+
+def create_ai_usage_log_service(db: DbSession):
+    return CreateAIUsageLogService(db)
+
+
+CreateAIUsageLogServiceDep = Annotated[
+    CreateAIUsageLogService, Depends(create_ai_usage_log_service)
+]
+
+
+def ai_service(db: DbSession):
+    return AIService(db)
+
+
+AIServiceDep = Annotated[AIService, Depends(ai_service)]
+
+
+def diary_service(db: DbSession):
+    return DiaryService(db)
+
+
+DiaryServiceDep = Annotated[DiaryService, Depends(diary_service)]

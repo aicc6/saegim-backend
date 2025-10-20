@@ -323,7 +323,8 @@ async def upload_image_to_minio(file: UploadFile) -> Tuple[str, str]:
 
 
 async def upload_image_with_thumbnail_to_minio(
-    file: UploadFile, thumbnail_size: tuple[int, int] = FileConstants.THUMBNAIL_SIZE
+    file: UploadFile,
+    thumbnail_size: tuple[int, int] = FileConstants.THUMBNAIL_SIZE,
 ):
     """
     이미지와 썸네일을 MinIO에 업로드하는 편의 함수

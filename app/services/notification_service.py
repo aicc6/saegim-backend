@@ -185,7 +185,7 @@ class NotificationService(BaseService):
                 settings = NotificationSettings(user_id=user_id)
                 tx.add(settings)
 
-            return NotificationSettingsResponseData.model_validate(settings)
+        return NotificationSettingsResponseData.model_validate(settings)
 
     def update_notification_settings(
         self,

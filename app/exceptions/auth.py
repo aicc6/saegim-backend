@@ -121,3 +121,8 @@ class DeletedAccountException(HTTPException):
             else ""
         )
         self.url = url
+
+        super().__init__(
+            status_code=403,
+            detail=message,
+        )

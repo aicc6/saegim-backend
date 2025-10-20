@@ -4,7 +4,7 @@ httpx 중복 사용 패턴 제거 및 표준화된 HTTP 요청 제공
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from fastapi import status
@@ -30,7 +30,7 @@ class HttpClient:
         self,
         url: str,
         data: dict[str, Any],
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
         expected_status: int = status.HTTP_200_OK,
     ) -> dict[str, Any]:
         """POST JSON 요청 실행
@@ -64,17 +64,17 @@ class HttpClient:
 
                 return response.json()
 
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as e:
             logger.error(f"Request timeout for URL: {url}")
-            raise ErrorFactory.internal_error("요청 시간 초과")
+            raise ErrorFactory.internal_error("요청 시간 초과") from e
         except httpx.RequestError as e:
             logger.error(f"Request error for URL {url}: {e}")
-            raise ErrorFactory.internal_error("네트워크 요청 오류")
+            raise ErrorFactory.internal_error("네트워크 요청 오류") from e
 
     async def get_json(
         self,
         url: str,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
         expected_status: int = status.HTTP_200_OK,
     ) -> dict[str, Any]:
         """GET JSON 요청 실행

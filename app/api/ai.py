@@ -8,15 +8,17 @@ import asyncio
 from fastapi import APIRouter, Path
 from fastapi.responses import StreamingResponse
 
-from app.core.deps import CurrentUserId, DbSession
+from app.core.deps import (
+    AIServiceDep,
+    CreateAIUsageLogServiceDep,
+    CurrentUserId,
+)
 from app.schemas.ai import (
     CreateAiUsageLogRequest,
     CreateAiUsageLogResponse,
     GetOriginalUserInputResponse,
 )
 from app.schemas.create_diary import CreateDiaryRequest
-from app.services.ai_log import AIService
-from app.services.create_diary import diary_service
 
 router = APIRouter(
     tags=["AI"],
@@ -29,14 +31,12 @@ router = APIRouter(
     response_model=CreateAiUsageLogResponse,
 )
 async def create_ai_usage_log(
-    db: DbSession,
+    create_ai_usage_log_service: CreateAIUsageLogServiceDep,
     user_id: CurrentUserId,
     request: CreateAiUsageLogRequest,
 ):
     """AI 사용 로그 생성"""
-    service = diary_service(db)
-
-    data = await service.create_ai_usage_log(
+    data = await create_ai_usage_log_service.create_ai_usage_log(
         user_id,
         request,
     )
@@ -53,15 +53,12 @@ async def create_ai_usage_log(
     response_model=GetOriginalUserInputResponse,
 )
 async def get_original_user_input(
-    db: DbSession,
+    ai_service: AIServiceDep,
     user_id: CurrentUserId,
     *,
     session_id: str = Path(..., description="세션 ID"),
 ):
     """세션ID로 원본 사용자 입력 조회"""
-
-    ai_service = AIService(db)
-
     data = await ai_service.get_original_user_input(user_id, session_id)
 
     return GetOriginalUserInputResponse(
@@ -72,12 +69,11 @@ async def get_original_user_input(
 
 @router.post("/generate/stream")
 async def stream_ai_text(
-    db: DbSession,
+    ai_service: AIServiceDep,
     user_id: CurrentUserId,
     data: CreateDiaryRequest,
 ):
     """AI 텍스트 실시간 스트리밍 생성"""
-    ai_service = AIService(db)
 
     async def generate_stream():
         try:
@@ -116,12 +112,11 @@ async def stream_ai_text(
 # CHECK: 미사용 여부 확인 필요
 @router.post("/regenerate/{session_id}/stream")
 async def stream_regenerate_ai_text(
-    db: DbSession,
+    ai_service: AIServiceDep,
     user_id: CurrentUserId,
     session_id: str,
 ):
     """세션 ID 기반 AI 텍스트 실시간 스트리밍 재생성"""
-    ai_service = AIService(db)
 
     async def regenerate_stream():
         try:

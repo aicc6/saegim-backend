@@ -4,9 +4,11 @@
 
 from datetime import date, datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.schemas.base import BaseResponse
 from app.utils.validators import convert_uuid_to_string, parse_keywords_from_json
 
 
@@ -60,7 +62,7 @@ class ImageResponse(BaseModel):
         from_attributes = True
 
 
-class DiaryResponse(BaseModel):
+class DiaryResponseData(BaseModel):
     """다이어리 응답 스키마"""
 
     id: str
@@ -95,7 +97,11 @@ class DiaryResponse(BaseModel):
         from_attributes = True
 
 
-class DiaryListResponse(BaseModel):
+class DiaryResponse(BaseResponse[DiaryResponseData]):
+    pass
+
+
+class DiaryListResponseData(BaseModel):
     """다이어리 목록 응답 스키마 (캘린더용)"""
 
     id: str
@@ -127,6 +133,71 @@ class DiaryListResponse(BaseModel):
         from_attributes = True
 
 
+class DiaryListResponse(BaseResponse[list[DiaryListResponseData]]):
+    pass
+
+
+class GetDiaryImageResponseData(BaseModel):
+    id: UUID
+    file_path: str
+    thumbnail_path: str | None = None
+    mime_type: str | None = None
+    file_size: int | None = None
+    created_at: str
+
+
+class GetDiaryImageResponse(BaseResponse[list[GetDiaryImageResponseData]]):
+    pass
+
+
+class UploadImageResponseData(BaseModel):
+    """이미지 업로드 응답 스키마"""
+
+    id: UUID
+    file_path: str
+    thumbnail_path: str | None
+    mime_type: str | None
+    file_size: int | None
+
+
+class UploadImageResponse(BaseResponse[UploadImageResponseData]):
+    pass
+
+
+class UploadImagesResponse(BaseResponse[list[UploadImageResponseData]]):
+    pass
+
+
+class UploadHandWritingImageResponseData(BaseModel):
+    """손글씨 이미지 업로드 응답 스키마"""
+
+    file_id: UUID
+    original_url: str
+    thumbnail_url: str | None
+    mime_type: str | None
+    file_size: int | None
+    filename: str | None
+
+
+class UploadHandWritingImageResponse(BaseResponse[UploadHandWritingImageResponseData]):
+    pass
+
+
+class UploadHandWritingImagesResponse(
+    BaseResponse[list[UploadHandWritingImageResponseData]]
+):
+    pass
+
+
+class DiaryCreateRequestImage(BaseModel):
+    """다이어리 생성 요청 이미지 스키마"""
+
+    original_url: str = Field(..., description="이미지 파일 경로")
+    thumbnail_url: str | None = Field(None, description="썸네일 파일 경로")
+    mime_type: str | None = Field(None, description="이미지 MIME 타입")
+    file_size: int | None = Field(None, description="이미지 파일 크기")
+
+
 class DiaryCreateRequest(BaseModel):
     """다이어리 생성 요청 스키마"""
 
@@ -145,7 +216,7 @@ class DiaryCreateRequest(BaseModel):
     diary_date: date | None = Field(
         None, description="다이어리 작성 날짜 (사용자가 선택한 날짜)"
     )
-    uploaded_images: list[dict] | None = Field(
+    uploaded_images: list[DiaryCreateRequestImage] | None = Field(
         None, description="업로드된 이미지 정보 (AI 생성 시)"
     )
 
