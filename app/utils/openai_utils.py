@@ -413,8 +413,8 @@ async def handwriting_ocr_from_url(image_url: str) -> str:
                 ],
             }
         ],
-        model="gpt-5",  # Vision 인식 지원 모델명
-        # temperature=0.0,
+        model="gpt-4o",  # Vision 인식 지원 모델명
+        temperature=0.0,
         max_completion_tokens=2048,
     )
     return response["content"]
