@@ -3,6 +3,7 @@
 """
 
 from .ai_usage_log import AIUsageLog
+from .app_version import AppVersion
 from .base import BaseModel
 from .diary import DiaryEntry
 from .email_verification import EmailVerification
@@ -18,6 +19,7 @@ __all__ = [
     "BaseModel",
     "User",
     "AIUsageLog",
+    "AppVersion",
     "DiaryEntry",
     "EmailVerification",
     "EmotionStats",
@@ -44,4 +46,5 @@ __all__ = [
     "EmotionStats",
     "AIUsageLog",
     "Notification",
+    "AppVersion",
 ]
