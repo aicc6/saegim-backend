@@ -252,3 +252,23 @@ class DiaryUpdateRequest(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class DiaryContentResponseData(BaseModel):
+    """다이어리 content만 조회 응답 스키마"""
+
+    id: str
+    content: str
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def validate_uuid(cls, v: Any):
+        """UUID를 문자열로 변환"""
+        return convert_uuid_to_string(v)
+
+    class Config:
+        from_attributes = True
+
+
+class DiaryContentResponse(BaseResponse[DiaryContentResponseData]):
+    pass

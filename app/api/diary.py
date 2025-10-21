@@ -22,6 +22,8 @@ from app.constants import SortOrder
 from app.core.deps import AIServiceDep, CurrentUserId, DiaryServiceDep
 from app.schemas.base import BaseResponse, MessageResponse, MessageResponseData
 from app.schemas.diary import (
+    DiaryContentResponse,
+    DiaryContentResponseData,
     DiaryCreateRequest,
     DiaryListResponse,
     DiaryListResponseData,
@@ -237,6 +239,26 @@ async def get_calendar_diaries(
     return DiaryListResponse(
         data=[DiaryListResponseData.model_validate(diary) for diary in data],
         message=f"캘린더 다이어리 조회 성공 (총 {len(data)}개)",
+    )
+
+
+@router.get(
+    "/{diary_id}/content",
+    response_model=DiaryContentResponse,
+)
+async def get_diary_content(
+    diary_service: DiaryServiceDep,
+    user_id: CurrentUserId,
+    *,
+    diary_id: UUID = Path(..., description="다이어리 ID (UUID)"),
+):
+    """JWT 인증된 사용자의 특정 다이어리 content만 조회"""
+
+    diary = diary_service.get_diary(user_id, diary_id)
+
+    return DiaryContentResponse(
+        data=DiaryContentResponseData(id=str(diary.id), content=diary.content),
+        message="다이어리 content 조회 성공",
     )
 
 
