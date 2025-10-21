@@ -16,6 +16,7 @@ from app.core.deps import (
 from app.schemas.ai import (
     CreateAiUsageLogRequest,
     CreateAiUsageLogResponse,
+    GetAllPromptsResponse,
     GetOriginalUserInputResponse,
 )
 from app.schemas.create_diary import CreateDiaryRequest
@@ -64,6 +65,23 @@ async def get_original_user_input(
     return GetOriginalUserInputResponse(
         data=data,
         message="원본 사용자 입력 조회 성공",
+    )
+
+
+@router.get(
+    "/prompts",
+    response_model=GetAllPromptsResponse,
+)
+async def get_all_prompts(
+    ai_service: AIServiceDep,
+    user_id: CurrentUserId,
+):
+    """모든 AI 사용 로그에서 프롬프트 조회"""
+    data = ai_service.get_all_prompts()
+
+    return GetAllPromptsResponse(
+        data=data,
+        message="프롬프트 조회 성공",
     )
 
 

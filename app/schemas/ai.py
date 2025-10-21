@@ -46,3 +46,20 @@ class GetOriginalUserInputResponseData(BaseModel):
 
 class GetOriginalUserInputResponse(BaseResponse[GetOriginalUserInputResponseData]):
     pass
+
+
+class PromptData(BaseModel):
+    """프롬프트 데이터"""
+
+    prompt: str | None = None
+
+
+class GetAllPromptsResponseData(BaseModel):
+    """모든 프롬프트 조회 응답 데이터"""
+
+    prompts: list[PromptData]
+    total_count: int
+
+
+class GetAllPromptsResponse(BaseResponse[GetAllPromptsResponseData]):
+    pass
