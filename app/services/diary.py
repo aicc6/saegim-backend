@@ -307,6 +307,7 @@ class DiaryService(BaseService):
 
             # 데이터베이스에 저장
             tx.add(new_diary)
+            tx.flush()  # ID를 얻기 위해 flush 실행
 
             # 업로드된 이미지가 있다면 Image 레코드 생성
             if request.uploaded_images:
