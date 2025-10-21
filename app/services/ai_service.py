@@ -20,11 +20,7 @@ from app.exceptions.ai import (
     SessionNotFoundException,
 )
 from app.models.ai_usage_log import AIUsageLog
-from app.schemas.ai import (
-    GetAllPromptsResponseData,
-    GetOriginalUserInputResponseData,
-    PromptData,
-)
+from app.schemas.ai import GetOriginalUserInputResponseData
 from app.schemas.create_diary import CreateDiaryRequest
 from app.services.base import BaseService
 
@@ -932,32 +928,3 @@ class AIService(BaseService):
                 f"Fallback 통합 분석: emotion={emotion}->{english_emotion}, keywords={keywords}"
             )
             return {"emotion": english_emotion, "keywords": keywords}
-
-    def get_all_prompts(self) -> GetAllPromptsResponseData:
-        """
-        모든 AI 사용 로그에서 프롬프트 조회
-
-        Returns:
-            GetAllPromptsResponseData: 모든 프롬프트 데이터
-        """
-        try:
-            # request_data에서 prompt 추출하는 쿼리
-            statement = select(AIUsageLog.request_data["prompt"].astext).select_from(
-                AIUsageLog
-            )
-
-            results = self._db.execute(statement).scalars().all()
-
-            # 프롬프트 데이터 변환
-            prompts = [PromptData(prompt=prompt) for prompt in results]
-
-            return GetAllPromptsResponseData(
-                prompts=prompts, total_count=len(prompts)
-            )
-
-        except Exception as e:
-            logger.error(f"프롬프트 조회 실패: {str(e)}")
-            raise InvalidRequestException(
-                detail=f"프롬프트 조회 중 오류가 발생했습니다: {str(e)}",
-                field="prompts",
-            ) from e
