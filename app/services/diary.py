@@ -132,8 +132,8 @@ class DiaryService(BaseService):
     def get_diary_by_id(
         self, diary_id: UUID, user_id: UUID | None = None
     ) -> DiaryEntry | None:
-        """ID로 다이어리 조회 (Soft Delete 제외)"""
-        statement = select(DiaryEntry).where(
+        """ID로 다이어리 조회 (Soft Delete 제외) - 이미지 관계 포함"""
+        statement = select(DiaryEntry).options(selectinload(DiaryEntry.images)).where(
             DiaryEntry.id == diary_id, DiaryEntry.deleted_at.is_(None)
         )
 
@@ -172,8 +172,10 @@ class DiaryService(BaseService):
         return result.scalars().all()
 
     def get_diary(self, user_id: UUID, diary_id: UUID):
-        diary = self.__find_by_id(diary_id)
+        diary = self.get_diary_by_id(diary_id, user_id)
 
+        if diary is None:
+            raise DiaryNotFoundException(diary_id)
         if diary.deleted_at is not None:
             raise DiaryAlreadyDeletedException(diary_id)
         if diary.user_id != user_id:
@@ -322,7 +324,9 @@ class DiaryService(BaseService):
                 ]
                 tx.add_all(images)
 
-        return new_diary
+        # 생성된 다이어리를 이미지 관계와 함께 다시 조회하여 반환
+        diary_with_images = self.get_diary_by_id(new_diary.id, user_id)
+        return diary_with_images
 
     def update_diary(
         self,
@@ -353,7 +357,8 @@ class DiaryService(BaseService):
             # 데이터베이스에 저장
             tx.add(diary)
 
-        return diary
+        # 수정된 다이어리를 이미지 관계와 함께 다시 조회하여 반환
+        return self.get_diary_by_id(diary_id, user_id)
 
     def delete_diary(self, user_id: UUID, diary_id: UUID):
         """다이어리 삭제 (Soft Delete) - 관련 이미지들도 MinIO에서 삭제"""
@@ -398,8 +403,8 @@ class DiaryService(BaseService):
             tx.add(diary)
 
     def __find_by_id(self, diary_id: UUID, tx: Session | None = None) -> DiaryEntry:
-        """내부용: ID로 다이어리 조회"""
-        statement = select(DiaryEntry).where(
+        """내부용: ID로 다이어리 조회 - 이미지 관계 포함"""
+        statement = select(DiaryEntry).options(selectinload(DiaryEntry.images)).where(
             DiaryEntry.id == diary_id,
         )
 
