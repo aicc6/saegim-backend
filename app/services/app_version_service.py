@@ -151,10 +151,19 @@ class AppVersionService(BaseService):
                 platform=platform,
             )
 
-        # 다운로드 URL 생성
+        # 커스텀 파일명 생성 (saegim-{version}.{extension})
+        file_extension = (
+            latest_version.file_name.split(".")[-1]
+            if latest_version.file_name
+            else "apk"
+        )
+        custom_filename = f"saegim-{latest_version.version_name}.{file_extension}"
+
+        # 다운로드 URL 생성 (커스텀 파일명 포함)
         download_url = await self._minio_service.get_presigned_url(
             object_name=latest_version.file_path,
             expires=timedelta(hours=1),
+            custom_filename=custom_filename,
         )
 
         response = UploadAppResponseData.model_validate(latest_version)

@@ -96,6 +96,7 @@ class MinioService:
         self,
         object_name: str,
         expires: timedelta = timedelta(hours=1),
+        custom_filename: str | None = None,
     ) -> str:
         """
         파일 다운로드를 위한 사전 서명된 URL 생성
@@ -103,18 +104,28 @@ class MinioService:
         Args:
             object_name: MinIO 객체명
             expires: URL 만료 시간
+            custom_filename: 커스텀 다운로드 파일명 (None이면 원본 파일명 사용)
 
         Returns:
             str: 사전 서명된 URL
         """
         try:
             loop = asyncio.get_event_loop()
+
+            # response_headers 설정 (커스텀 파일명이 있는 경우)
+            response_headers = None
+            if custom_filename:
+                response_headers = {
+                    "response-content-disposition": f'attachment; filename="{custom_filename}"'
+                }
+
             url = await loop.run_in_executor(
                 None,
                 lambda: self.client.presigned_get_object(
                     bucket_name=self.bucket_name,
                     object_name=object_name,
                     expires=expires,
+                    response_headers=response_headers,
                 ),
             )
             return url
