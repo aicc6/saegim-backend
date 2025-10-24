@@ -113,7 +113,7 @@ async def handwriting_to_diary(
         # 다이어리 실제 저장
         request = DiaryCreateRequest(
             title=None,  # AI가 자동 생성
-            content=ai_generated_text,  # AI가 생성한 다이어리 텍스트
+            content=ocr_text,  # 사용자가 입력한 프롬프트가 들어감
             user_emotion=body.user_emotion,  # 사용자가 선택한 감정
             ai_generated_text=ai_generated_text,  # AI가 생성한 텍스트
             ocr_text=ocr_text,  # OCR 원본 텍스트
