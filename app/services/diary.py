@@ -17,7 +17,9 @@ from app.exceptions.diary import (
     DiaryAlreadyDeletedException,
     DiaryImageAlreadyDeletedException,
     DiaryNotFoundException,
+    DiaryValidationException,
 )
+from app.models.category import DiaryCategory
 from app.models.diary import DiaryEntry
 from app.models.image import Image
 from app.schemas.diary import (
@@ -55,8 +57,10 @@ class DiaryService(BaseService):
         sort_order: str = SortOrder.DESC.value,
     ):
         """다이어리 목록 조회 (페이지네이션 포함)"""
-        # 기본 쿼리 구성 - 이미지 관계 포함
-        statement = select(DiaryEntry).options(selectinload(DiaryEntry.images))
+        # 기본 쿼리 구성 - 이미지 및 카테고리 관계 포함
+        statement = select(DiaryEntry).options(
+            selectinload(DiaryEntry.images), selectinload(DiaryEntry.category)
+        )
 
         # 사용자별 필터링 (Soft Delete 제외)
         if user_id is not None:
@@ -132,9 +136,13 @@ class DiaryService(BaseService):
     def get_diary_by_id(
         self, diary_id: UUID, user_id: UUID | None = None
     ) -> DiaryEntry | None:
-        """ID로 다이어리 조회 (Soft Delete 제외) - 이미지 관계 포함"""
-        statement = select(DiaryEntry).options(selectinload(DiaryEntry.images)).where(
-            DiaryEntry.id == diary_id, DiaryEntry.deleted_at.is_(None)
+        """ID로 다이어리 조회 (Soft Delete 제외) - 이미지/카테고리 관계 포함"""
+        statement = (
+            select(DiaryEntry)
+            .options(
+                selectinload(DiaryEntry.images), selectinload(DiaryEntry.category)
+            )
+            .where(DiaryEntry.id == diary_id, DiaryEntry.deleted_at.is_(None))
         )
 
         if user_id is not None:
@@ -151,7 +159,9 @@ class DiaryService(BaseService):
 
         statement = (
             select(DiaryEntry)
-            .options(selectinload(DiaryEntry.images))
+            .options(
+                selectinload(DiaryEntry.images), selectinload(DiaryEntry.category)
+            )
             .where(
                 DiaryEntry.user_id == user_id,
                 DiaryEntry.deleted_at.is_(None),
@@ -291,6 +301,9 @@ class DiaryService(BaseService):
         """새로운 다이어리 생성"""
 
         with TransactionManager.transaction(self._db) as tx:
+            # 카테고리 검증
+            category = self.__validate_category(tx, user_id, request.category_id)
+
             # 새 다이어리 엔트리 생성 (실제 AI 데이터 사용)
             new_diary = DiaryEntry(
                 user_id=user_id,
@@ -303,6 +316,7 @@ class DiaryService(BaseService):
                 ocr_text=request.ocr_text,
                 keywords=request.keywords,
                 diary_date=request.diary_date,
+                category_id=category.id if category else None,
             )
 
             # 데이터베이스에 저장
@@ -346,6 +360,11 @@ class DiaryService(BaseService):
 
             # 업데이트할 필드들만 수정
             update_data = request.model_dump(exclude_unset=True)
+
+            if "category_id" in update_data:
+                category_id = update_data.pop("category_id")
+                category = self.__validate_category(tx, user_id, category_id)
+                diary.category_id = category.id if category else None
 
             for field, value in update_data.items():
                 if hasattr(diary, field):
@@ -404,9 +423,15 @@ class DiaryService(BaseService):
             tx.add(diary)
 
     def __find_by_id(self, diary_id: UUID, tx: Session | None = None) -> DiaryEntry:
-        """내부용: ID로 다이어리 조회 - 이미지 관계 포함"""
-        statement = select(DiaryEntry).options(selectinload(DiaryEntry.images)).where(
-            DiaryEntry.id == diary_id,
+        """내부용: ID로 다이어리 조회 - 이미지/카테고리 포함"""
+        statement = (
+            select(DiaryEntry)
+            .options(
+                selectinload(DiaryEntry.images), selectinload(DiaryEntry.category)
+            )
+            .where(
+                DiaryEntry.id == diary_id,
+            )
         )
 
         result = (tx or self._db).execute(statement)
@@ -417,3 +442,26 @@ class DiaryService(BaseService):
             raise DiaryNotFoundException(diary_id)
 
         return diary
+
+    def __validate_category(
+        self, tx: Session, user_id: UUID, category_id: str | None
+    ) -> DiaryCategory | None:
+        """카테고리가 현재 사용자 소유인지 검증"""
+
+        if category_id is None:
+            return None
+
+        statement = select(DiaryCategory).where(
+            DiaryCategory.id == category_id,
+            DiaryCategory.user_id == user_id,
+        )
+
+        category = tx.execute(statement).scalar_one_or_none()
+
+        if category is None:
+            raise DiaryValidationException(
+                detail="존재하지 않거나 접근할 수 없는 카테고리입니다.",
+                field="category_id",
+            )
+
+        return category

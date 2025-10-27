@@ -62,6 +62,18 @@ class ImageResponse(BaseModel):
         from_attributes = True
 
 
+class DiaryCategoryResponse(BaseModel):
+    """다이어리 카테고리 응답 스키마"""
+
+    id: str
+    name: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class DiaryResponseData(BaseModel):
     """다이어리 응답 스키마"""
 
@@ -77,6 +89,7 @@ class DiaryResponseData(BaseModel):
     is_public: bool
     keywords: list[str] | None = None  # keywords를 리스트 타입으로 수정
     diary_date: date | None = None  # 다이어리 작성 날짜
+    category: DiaryCategoryResponse | None = None
     created_at: datetime
     updated_at: datetime | None = None
     images: list[ImageResponse] | None = None  # 이미지 정보 추가
@@ -113,6 +126,7 @@ class DiaryListResponseData(BaseModel):
     ai_emotion: str | None = None
     keywords: list[str] | None = None  # keywords를 리스트 타입으로 수정
     diary_date: date | None = None  # 다이어리 작성 날짜
+    category: DiaryCategoryResponse | None = None
     created_at: datetime
     is_public: bool
     images: list[ImageResponse] | None = None  # 이미지 정보 추가
@@ -216,6 +230,11 @@ class DiaryCreateRequest(BaseModel):
     diary_date: date | None = Field(
         None, description="다이어리 작성 날짜 (사용자가 선택한 날짜)"
     )
+    category_id: str | None = Field(
+        None,
+        description="연결할 카테고리 ID (사용자가 생성한 cat_ 형태)",
+        min_length=1,
+    )
     uploaded_images: list[DiaryCreateRequestImage] | None = Field(
         None, description="업로드된 이미지 정보 (AI 생성 시)"
     )
@@ -243,6 +262,7 @@ class DiaryUpdateRequest(BaseModel):
     user_emotion: str | None = None
     keywords: list[str] | None = None
     diary_date: date | None = None
+    category_id: str | None = None
 
     @field_validator("keywords", mode="before")
     @classmethod

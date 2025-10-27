@@ -5,6 +5,7 @@
 from .ai_usage_log import AIUsageLog
 from .app_version import AppVersion
 from .base import BaseModel
+from .category import DiaryCategory
 from .diary import DiaryEntry
 from .email_verification import EmailVerification
 from .emotion_stats import EmotionStats
@@ -20,6 +21,7 @@ __all__ = [
     "User",
     "AIUsageLog",
     "AppVersion",
+    "DiaryCategory",
     "DiaryEntry",
     "EmailVerification",
     "EmotionStats",
@@ -36,6 +38,7 @@ __all__ = [
 __all__ = [
     "User",
     "DiaryEntry",
+    "DiaryCategory",
     "OAuthToken",
     "EmailVerification",
     "PasswordResetToken",

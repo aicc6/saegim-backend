@@ -24,6 +24,7 @@ from sqlalchemy.sql import func, text
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from .category import DiaryCategory
     from .image import Image
     from .user import User
 
@@ -51,6 +52,12 @@ class DiaryEntry(Base):
     diary_date: Mapped[date | None] = mapped_column(
         Date, nullable=True, index=True
     )  # 다이어리 작성 날짜 (사용자가 선택한 날짜)
+    category_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("diary_categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -69,6 +76,9 @@ class DiaryEntry(Base):
     user: Mapped[User] = relationship("User", back_populates="diaries")
     images: Mapped[list[Image]] = relationship(
         "Image", back_populates="diary", cascade="all, delete-orphan"
+    )
+    category: Mapped[DiaryCategory | None] = relationship(
+        "DiaryCategory", back_populates="diaries"
     )
 
     # 감정 값 제약 조건 추가

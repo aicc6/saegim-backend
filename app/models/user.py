@@ -18,6 +18,7 @@ from sqlalchemy.sql import func
 
 if TYPE_CHECKING:
     from app.models.ai_usage_log import AIUsageLog
+    from app.models.category import DiaryCategory
     from app.models.diary import DiaryEntry
     from app.models.emotion_stats import EmotionStats
     from app.models.fcm import FCMToken, NotificationHistory, NotificationSettings
@@ -87,6 +88,9 @@ class User(Base):
         back_populates="user", lazy="select"
     )
     diaries: Mapped[list[DiaryEntry]] = relationship(
+        back_populates="user", lazy="select", cascade="all, delete-orphan"
+    )
+    diary_categories: Mapped[list[DiaryCategory]] = relationship(
         back_populates="user", lazy="select", cascade="all, delete-orphan"
     )
 

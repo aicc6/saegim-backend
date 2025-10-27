@@ -24,6 +24,7 @@ from app.services.app_version_service import AppVersionService
 from app.services.auth_service import AuthService
 from app.services.cleanup_service import CleanupService
 from app.services.create_diary import CreateAIUsageLogService
+from app.services.category import DiaryCategoryService
 from app.services.diary import DiaryService
 from app.services.minio_service import MinioService, get_minio_service
 from app.services.notification_service import NotificationService
@@ -255,6 +256,15 @@ def diary_service(db: DbSession):
 
 
 DiaryServiceDep = Annotated[DiaryService, Depends(diary_service)]
+
+
+def diary_category_service(db: DbSession):
+    return DiaryCategoryService(db)
+
+
+DiaryCategoryServiceDep = Annotated[
+    DiaryCategoryService, Depends(diary_category_service)
+]
 
 MinioServiceDep = Annotated[MinioService, Depends(get_minio_service)]
 
