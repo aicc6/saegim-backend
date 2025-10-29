@@ -51,6 +51,10 @@ class User(Base):
             "deleted_at",
             postgresql_where=text("deleted_at IS NULL"),
         ),
+        CheckConstraint(
+            "preferred_language IS NULL OR preferred_language IN ('ko','en','ja')",
+            name="ck_users_preferred_language",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -65,6 +69,7 @@ class User(Base):
     provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
     provider_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     profile_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    preferred_language: Mapped[str | None] = mapped_column(String(10), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     created_at: Mapped[datetime] = mapped_column(

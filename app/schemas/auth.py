@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -9,6 +10,12 @@ from app.schemas.base import BaseResponse, MessageResponseData
 
 
 # authentication
+class PreferredLanguage(str, Enum):
+    KO = "ko"
+    EN = "en"
+    JA = "ja"
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -52,6 +59,7 @@ class GetCurrentUserInfoResponseData(BaseModel):
     email: str
     nickname: str
     profile_image_url: str | None
+    preferred_language: PreferredLanguage | None
     account_type: str | None
     provider: str | None
     is_active: bool
@@ -75,6 +83,20 @@ class UpdateUserProfileResponseData(BaseModel):
 
 
 class UpdateUserProfileResponse(BaseResponse[UpdateUserProfileResponseData]):
+    pass
+
+
+class UpdateUserSettingsRequest(BaseModel):
+    preferred_language: PreferredLanguage | None = Field(default=None)
+
+
+class UpdateUserSettingsResponseData(BaseModel):
+    user_id: UUID
+    preferred_language: PreferredLanguage | None
+    updated_at: str
+
+
+class UpdateUserSettingsResponse(BaseResponse[UpdateUserSettingsResponseData]):
     pass
 
 

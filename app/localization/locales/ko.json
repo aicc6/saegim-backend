@@ -1,0 +1,17 @@
+{
+  "app": {
+    "name": "새김",
+    "description": "감성 AI 다이어리 서비스"
+  },
+  "navigation": {
+    "home": "홈",
+    "diary": "다이어리",
+    "settings": "설정"
+  },
+  "auth": {
+    "login": "로그인",
+    "logout": "로그아웃",
+    "profile_updated": "프로필이 성공적으로 업데이트되었습니다.",
+    "settings_updated": "설정이 성공적으로 저장되었습니다."
+  }
+}

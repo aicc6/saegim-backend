@@ -15,6 +15,7 @@ from app.api.auth.oauth import router as oauth_router
 from app.api.auth.registration import router as registration_router
 from app.api.category import router as category_router
 from app.api.diary import router as diary_router
+from app.api.localization import router as localization_router
 from app.api.legacy import router as legacy_router
 from app.api.notification import router as notification_router
 from app.api.public import router as public_router
@@ -23,6 +24,7 @@ from app.api.support import router as support_router
 router = APIRouter()
 
 router.include_router(public_router, prefix="/api/public")
+router.include_router(localization_router, prefix="/api/public/localization")
 router.include_router(ai_router, prefix="/api/ai")
 router.include_router(diary_router, prefix="/api/diary")
 router.include_router(category_router, prefix="/api/categories")

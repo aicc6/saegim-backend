@@ -1,0 +1,17 @@
+{
+  "app": {
+    "name": "Saegim",
+    "description": "Emotional AI diary service"
+  },
+  "navigation": {
+    "home": "Home",
+    "diary": "Diary",
+    "settings": "Settings"
+  },
+  "auth": {
+    "login": "Log In",
+    "logout": "Log Out",
+    "profile_updated": "Profile updated successfully.",
+    "settings_updated": "Settings saved successfully."
+  }
+}

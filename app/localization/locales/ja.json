@@ -1,0 +1,17 @@
+{
+  "app": {
+    "name": "セギム",
+    "description": "感性AI日記サービス"
+  },
+  "navigation": {
+    "home": "ホーム",
+    "diary": "日記",
+    "settings": "設定"
+  },
+  "auth": {
+    "login": "ログイン",
+    "logout": "ログアウト",
+    "profile_updated": "プロフィールが更新されました。",
+    "settings_updated": "設定が保存されました。"
+  }
+}

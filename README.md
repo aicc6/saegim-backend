@@ -198,6 +198,22 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 | GET    | `/{diary_id}`         | 특정 다이어리 조회                             |
 | GET    | `/calendar/{user_id}` | 캘린더용 다이어리 조회 (날짜 범위)             |
 
+### 사용자 설정 API (`/api/auth`)
+
+- `GET /me`: 현재 로그인한 사용자 정보 조회 (`preferred_language` 포함)
+- `PATCH /me/settings`: 사용자 선호 언어(`preferred_language`) 저장 (허용 값: `ko`, `en`, `ja`)
+
+### 로컬라이제이션 API (`/api/public/localization`)
+
+- `GET /languages`: 지원 언어 목록 (`code`, `name`, `native_name`)
+- `GET /translations/{locale}`: 지정한 언어의 번역 리소스(JSON). 미지원 코드 요청 시 기본 언어(`ko`)로 폴백됩니다.
+
+#### 번역 리소스 구조
+
+- JSON은 중첩 키 형태(`app.name`, `navigation.home` 등)를 그대로 유지합니다.
+- 프론트엔드는 초기 진입 시 `GET /translations/{locale}`로 번역 데이터를 가져오거나 서버 렌더링 시 해당 JSON을 프리로드하면 됩니다.
+- 새 키를 추가할 땐 `app/localization/locales/*.json` 파일을 동일한 구조로 모두 갱신해주세요.
+
 ### 쿼리 파라미터
 
 #### 다이어리 목록 조회
@@ -265,6 +281,11 @@ app/
 │   ├── base.py           # 기본 모델
 │   ├── user.py           # 사용자 모델
 │   └── diary.py          # 다이어리 모델
+├── localization/          # 다국어 번역 리소스 및 로더
+│   ├── locales/          # JSON 번역 파일 (ko/en/ja)
+│   ├── __init__.py
+│   ├── languages.py
+│   └── loader.py
 ├── schemas/               # API 스키마
 │   ├── base.py           # 기본 응답 스키마
 │   └── diary.py          # 다이어리 스키마 (캘린더용)

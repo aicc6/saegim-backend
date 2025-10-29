@@ -54,6 +54,8 @@ from app.schemas.auth import (
     SignUpResponseData,
     UpdateUserProfileRequest,
     UpdateUserProfileResponseData,
+    UpdateUserSettingsRequest,
+    UpdateUserSettingsResponseData,
     UploadProfileImageResponseData,
     VerifyEmailChangeTokenResponseData,
     VerifyPasswordAndChangeEmailRequest,
@@ -291,6 +293,7 @@ class AuthService(BaseService):
             email=current_user.email,
             nickname=current_user.nickname,
             profile_image_url=current_user.profile_image_url,
+            preferred_language=current_user.preferred_language,
             account_type=current_user.account_type,
             provider=current_user.provider,
             is_active=current_user.is_active,
@@ -320,6 +323,29 @@ class AuthService(BaseService):
             user_id=current_user.id,
             nickname=current_user.nickname,
             profile_image_url=current_user.profile_image_url,
+            updated_at=current_user.updated_at.isoformat(),
+        )
+
+    def update_user_settings(
+        self, user_id: UUID, request: UpdateUserSettingsRequest
+    ) -> UpdateUserSettingsResponseData:
+        with TransactionManager.transaction(self._db) as tx:
+            current_user = tx.execute(
+                select(User).where(User.id == user_id)
+            ).scalar_one()
+
+            current_user.preferred_language = request.preferred_language
+            current_user.updated_at = datetime.now(UTC)
+
+            logger.info(
+                "사용자 설정 업데이트: %s -> %s",
+                current_user.email,
+                current_user.preferred_language,
+            )
+
+        return UpdateUserSettingsResponseData(
+            user_id=current_user.id,
+            preferred_language=current_user.preferred_language,
             updated_at=current_user.updated_at.isoformat(),
         )
 

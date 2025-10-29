@@ -43,6 +43,8 @@ from app.schemas.auth import (
     RestoreAccountRequest,
     SendRestoreEmailRequest,
     UpdateUserProfileResponse,
+    UpdateUserSettingsRequest,
+    UpdateUserSettingsResponse,
     UploadProfileImageResponse,
     VerifyEmailChangeTokenResponse,
     VerifyPasswordAndChangeEmailResponse,
@@ -152,6 +154,21 @@ async def update_user_profile(
     return UpdateUserProfileResponse(
         data=data,
         message="프로필이 성공적으로 업데이트되었습니다.",
+    )
+
+
+@authenticated_router.patch("/me/settings", response_model=UpdateUserSettingsResponse)
+async def update_user_settings(
+    auth_service: AuthServiceDep,
+    current_user_id: CurrentUserId,
+    request: UpdateUserSettingsRequest,
+):
+    """사용자 설정 업데이트 API"""
+    data = auth_service.update_user_settings(current_user_id, request)
+
+    return UpdateUserSettingsResponse(
+        data=data,
+        message="사용자 설정이 성공적으로 업데이트되었습니다.",
     )
 
 
