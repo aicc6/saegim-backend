@@ -160,26 +160,33 @@ class MinIOUploader:
         """
         try:
             with Image.open(io.BytesIO(image_data)) as img:
-                # EXIF 데이터를 제거하고 새로운 이미지 생성
-                # getdata()를 사용하여 픽셀 데이터만 복사
-                img_without_exif = Image.new(img.mode, img.size)
-                img_without_exif.putdata(list(img.getdata()))
+                # 원본 포맷 유지
+                img_format = img.format or "JPEG"
 
                 # 이미지를 BytesIO에 저장
                 output = io.BytesIO()
 
-                # 원본 포맷 유지
-                img_format = img.format or "JPEG"
-
-                # EXIF 없이 저장 (exif 파라미터를 명시적으로 제외)
+                # EXIF 데이터를 제외하고 저장
+                # 원본 이미지 품질을 최대한 보존하면서 EXIF만 제거
                 if img_format.upper() == "JPEG":
-                    img_without_exif.save(
-                        output, format=img_format, quality=95, optimize=True
+                    # JPEG: 높은 품질로 저장, exif 제외
+                    img.save(
+                        output,
+                        format=img_format,
+                        quality=95,
+                        optimize=True,
+                        subsampling=0,  # 최고 품질의 색상 서브샘플링
                     )
                 elif img_format.upper() == "PNG":
-                    img_without_exif.save(output, format=img_format, optimize=True)
+                    # PNG: 무손실 압축, exif 제외
+                    img.save(
+                        output,
+                        format=img_format,
+                        optimize=True,
+                    )
                 else:
-                    img_without_exif.save(output, format=img_format)
+                    # 기타 포맷: 기본 저장
+                    img.save(output, format=img_format)
 
                 output.seek(0)
                 return output.getvalue()
