@@ -44,7 +44,7 @@ def translate(
     """Translate a backend message key using request context."""
 
     locale = resolve_locale(request, user_preferred_language)
-    translation = get_translation(f"backend.{message_key}", locale, default)
+    translation = get_translation(f"backend.{message_key}", locale, default=default)
 
     if translation is None:
         translation = default or message_key
