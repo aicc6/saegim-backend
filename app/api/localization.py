@@ -15,6 +15,7 @@ from app.schemas.localization import (
     GetTranslationsResponse,
     LanguageOption,
     TranslationPayload,
+    LanguageCode,
 )
 
 router = APIRouter(tags=["Localization"])
@@ -25,7 +26,9 @@ def list_languages() -> GetLanguagesResponse:
     """Return the list of languages supported by the application."""
 
     data = [
-        LanguageOption(code=lang.code, name=lang.name, native_name=lang.native_name)
+        LanguageOption(
+            code=LanguageCode(lang.code), name=lang.name, native_name=lang.native_name
+        )
         for lang in ENABLED_LANGUAGES
     ]
 
@@ -47,11 +50,15 @@ def get_translations(
     Falls back to the default language when the locale is not supported.
     """
 
-    fallback_locale = DEFAULT_LANGUAGE
-    resolved_locale = locale if locale in ENABLED_LANGUAGE_CODES else fallback_locale
+    fallback_locale = LanguageCode(DEFAULT_LANGUAGE)
+    resolved_locale = (
+        LanguageCode(locale)
+        if locale in ENABLED_LANGUAGE_CODES
+        else fallback_locale
+    )
 
     try:
-        translations = load_translations(resolved_locale)
+        translations = load_translations(resolved_locale.value)
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -59,11 +66,15 @@ def get_translations(
         ) from exc
 
     payload = TranslationPayload(
-        locale=resolved_locale,
         fallback_locale=fallback_locale,
         translations=translations,
+        locale=resolved_locale,
     )
 
-    message = "번역 데이터를 불러왔습니다." if resolved_locale == "ko" else "Translations loaded."
+    message = (
+        "번역 데이터를 불러왔습니다."
+        if resolved_locale == LanguageCode.KO
+        else "Translations loaded."
+    )
 
     return GetTranslationsResponse(data=payload, message=message)

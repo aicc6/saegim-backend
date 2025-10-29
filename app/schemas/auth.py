@@ -1,19 +1,12 @@
 import re
 from datetime import datetime
-from enum import Enum
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.schemas.base import BaseResponse, MessageResponseData
-
-
-# authentication
-class PreferredLanguage(str, Enum):
-    KO = "ko"
-    EN = "en"
-    JA = "ja"
+from app.schemas.localization import LanguageCode
 
 
 class LoginRequest(BaseModel):
@@ -59,7 +52,7 @@ class GetCurrentUserInfoResponseData(BaseModel):
     email: str
     nickname: str
     profile_image_url: str | None
-    preferred_language: PreferredLanguage | None
+    preferred_language: LanguageCode | None
     account_type: str | None
     provider: str | None
     is_active: bool
@@ -87,12 +80,12 @@ class UpdateUserProfileResponse(BaseResponse[UpdateUserProfileResponseData]):
 
 
 class UpdateUserSettingsRequest(BaseModel):
-    preferred_language: PreferredLanguage | None = Field(default=None)
+    preferred_language: LanguageCode | None = Field(default=None)
 
 
 class UpdateUserSettingsResponseData(BaseModel):
     user_id: UUID
-    preferred_language: PreferredLanguage | None
+    preferred_language: LanguageCode | None
     updated_at: str
 
 

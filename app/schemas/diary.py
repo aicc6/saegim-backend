@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.base import BaseResponse
+from app.schemas.localization import LanguageCode
 from app.utils.validators import convert_uuid_to_string, parse_keywords_from_json
 
 
@@ -29,6 +30,9 @@ class HandwritingToDiaryRequest(BaseModel):
     save: bool = Field(
         True,
         description="다이어리를 실제로 저장할지 여부 (True: 저장, False: 미리보기만)",
+    )
+    target_language: LanguageCode | None = Field(
+        None, description="AI가 생성한 글을 원하는 언어 코드 (ko/en/ja)"
     )
 
     @field_validator("user_emotion")

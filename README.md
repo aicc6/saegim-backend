@@ -214,6 +214,15 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 - 프론트엔드는 초기 진입 시 `GET /translations/{locale}`로 번역 데이터를 가져오거나 서버 렌더링 시 해당 JSON을 프리로드하면 됩니다.
 - 새 키를 추가할 땐 `app/localization/locales/*.json` 파일을 동일한 구조로 모두 갱신해주세요.
 
+### AI 생성 API (`/api/ai`)
+
+- `POST /generate/stream`: `target_language`(선택) 필드를 포함한 `CreateDiaryRequest`를 받아 SSE로 생성 결과를 스트리밍합니다. 언어를 지정하지 않으면 사용자 `preferred_language` 또는 기본값(`ko`)으로 응답합니다.
+- `POST /regenerate/{session_id}/stream`: 기존 세션을 재생성할 때도 동일한 언어 규칙을 적용하며, 스트리밍 메타데이터(`start`, `content`, `complete`)에 `target_language`가 함께 내려옵니다.
+
+### 손글씨 → 다이어리 API (`/api/diary/handwriting/to-diary`)
+
+- `target_language`(선택) 파라미터를 추가해 OCR 후 생성되는 AI 텍스트의 언어를 지정할 수 있습니다. 미지정 시 사용자 `preferred_language` → 기본값(`ko`) 순으로 결정됩니다.
+
 ### 쿼리 파라미터
 
 #### 다이어리 목록 조회

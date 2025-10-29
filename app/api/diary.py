@@ -19,7 +19,7 @@ from fastapi import (
 )
 
 from app.constants import SortOrder
-from app.core.deps import AIServiceDep, CurrentUserId, DiaryServiceDep
+from app.core.deps import AIServiceDep, CurrentUser, CurrentUserId, DiaryServiceDep
 from app.schemas.base import BaseResponse, MessageResponse, MessageResponseData
 from app.schemas.diary import (
     DiaryContentResponse,
@@ -37,6 +37,7 @@ from app.schemas.diary import (
     UploadHandWritingImagesResponse,
     UploadImageResponse,
 )
+from app.schemas.localization import LanguageCode
 from app.utils.minio_upload import (
     upload_image_with_thumbnail_to_minio,
 )
@@ -55,6 +56,7 @@ async def handwriting_to_diary(
     ai_service: AIServiceDep,
     diary_service: DiaryServiceDep,
     user_id: CurrentUserId,
+    current_user: CurrentUser,
     *,
     body: HandwritingToDiaryRequest = Body(...),
 ):
@@ -81,11 +83,24 @@ async def handwriting_to_diary(
             detail="손글씨 이미지에서 글씨를 인식하지 못했습니다. 이미지를 다시 확인해 주세요.",
         )
 
+    # 생성 언어 결정 (요청 > 사용자 설정 > 기본값)
+    if body.target_language is not None:
+        target_language = body.target_language
+    else:
+        try:
+            target_language = (
+                LanguageCode(current_user.preferred_language)
+                if current_user.preferred_language
+                else LanguageCode.KO
+            )
+        except ValueError:
+            target_language = LanguageCode.KO
+
     # AI 텍스트 생성 (비동기)
     logger.info("AI 다이어리 텍스트 생성 시작")
     generated_text = ""
     async for text_chunk in ai_service._stream_complete_analysis(
-        ocr_text, body.style, body.length
+        ocr_text, body.style, body.length, target_language.value
     ):
         if isinstance(text_chunk, dict) and "tokens_used" in text_chunk:
             continue
@@ -156,6 +171,7 @@ async def handwriting_to_diary(
             "style": body.style,
             "length": body.length,
             "image_url": body.image_url,
+            "target_language": target_language.value,
             "uploaded_images": (
                 body.uploaded_images
                 if body.uploaded_images

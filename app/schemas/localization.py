@@ -1,7 +1,8 @@
-"""Schematics for localization endpoints."""
+"""Schematics for localization endpoints and shared enums."""
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
@@ -9,8 +10,14 @@ from pydantic import BaseModel
 from app.schemas.base import BaseResponse
 
 
+class LanguageCode(str, Enum):
+    KO = "ko"
+    EN = "en"
+    JA = "ja"
+
+
 class LanguageOption(BaseModel):
-    code: str
+    code: LanguageCode
     name: str
     native_name: str
 
@@ -20,8 +27,8 @@ class GetLanguagesResponse(BaseResponse[list[LanguageOption]]):
 
 
 class TranslationPayload(BaseModel):
-    locale: str
-    fallback_locale: str
+    locale: LanguageCode
+    fallback_locale: LanguageCode
     translations: dict[str, Any]
 
 

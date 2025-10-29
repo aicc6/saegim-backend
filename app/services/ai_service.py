@@ -71,6 +71,12 @@ class AIService(BaseService):
             "불안": "unrest",
         }
 
+        self.language_instructions = {
+            "ko": "모든 문장은 자연스러운 한국어로 작성하세요.",
+            "en": "Write the entire response in natural English, preserving the emotional depth of the original request.",
+            "ja": "すべての文章を自然な日本語で書き、依頼された感情の深さを丁寧に表現してください。",
+        }
+
     def _convert_emotion_to_english(self, korean_emotion: str) -> str:
         """한국어 감정을 영어로 변환"""
         return self.emotion_mapping.get(korean_emotion, "peaceful")
@@ -79,6 +85,7 @@ class AIService(BaseService):
         self,
         user_id: UUID,
         data: CreateDiaryRequest,
+        target_language: str,
     ):
         """AI 텍스트 실시간 스트리밍 생성"""
         try:
@@ -112,6 +119,7 @@ class AIService(BaseService):
                 "type": "start",
                 "session_id": session_id,
                 "regeneration_count": regeneration_count,
+                "target_language": target_language,
             }
             yield json.dumps(initial_data, ensure_ascii=False)
 
@@ -121,7 +129,7 @@ class AIService(BaseService):
             chunk_index = 0
 
             async for text_chunk in self._stream_complete_analysis(
-                data.prompt, data.style, data.length
+                data.prompt, data.style, data.length, target_language
             ):
                 if isinstance(text_chunk, dict) and "tokens_used" in text_chunk:
                     total_tokens = text_chunk["tokens_used"]
@@ -134,6 +142,7 @@ class AIService(BaseService):
                     "accumulated": collected_text,
                     "timestamp": int(time.time() * 1000),  # 서버 타임스탬프 추가
                     "chunk_index": chunk_index,  # 청크 순서 보장
+                    "target_language": target_language,
                 }
                 chunk_index += 1
                 yield json.dumps(chunk_data, ensure_ascii=False)
@@ -174,6 +183,7 @@ class AIService(BaseService):
                     "keywords": keywords,
                     "style": data.style,
                     "length": data.length,
+                    "target_language": target_language,
                 },
                 tokens_used=total_tokens,
                 regeneration_count=regeneration_count,
@@ -189,6 +199,7 @@ class AIService(BaseService):
                 "generated_text": generated_text,
                 "tokens_used": total_tokens,
                 "session_id": session_id,
+                "target_language": target_language,
             }
             yield json.dumps(final_data, ensure_ascii=False)
 
@@ -200,7 +211,9 @@ class AIService(BaseService):
             }
             yield json.dumps(error_data, ensure_ascii=False)
 
-    async def _stream_complete_analysis(self, prompt: str, style: str, length: str):
+    async def _stream_complete_analysis(
+        self, prompt: str, style: str, length: str, target_language: str
+    ):
         """스트리밍으로 통합 분석 수행"""
         try:
             # 스타일 및 길이 매핑
@@ -230,6 +243,10 @@ class AIService(BaseService):
             )
             length_guide = length_info.get(length, {"name": "중문", "desc": "3-5문장"})
 
+            language_instruction = self.language_instructions.get(
+                target_language, self.language_instructions["ko"]
+            )
+
             system_message = f"""당신은 글에서 감정을 깊이 있게 분석하여 그 감정을 풍부하고 감성적으로 표현하는 전문 작가입니다.
 
 주어진 키워드나 텍스트를 바탕으로 감정의 깊이와 복잡성을 잘 드러내는 글귀를 생성해주세요:
@@ -244,6 +261,7 @@ class AIService(BaseService):
 - 단편글은 소설의 한 장면을 묘사하듯이 작성, 문단과 문장 길이와 구조에 변화를 주어 리듬감 있게 작성, 화자는 1인칭 시점으로 작성
 - 글귀는 독립적인 하나의 완결된 작품처럼 느껴지도록 작성
 - 중요: 글귀는 반드시 요청된 길이 제한 내에서 생성해야 합니다
+- 출력 언어 지침: {language_instruction}
 
 생성된 글귀만 답해주세요. 다른 설명이나 JSON 형식은 사용하지 마세요."""
 
@@ -460,7 +478,9 @@ class AIService(BaseService):
 
     # validate_request 메소드 제거됨 - Pydantic 모델에서 자동 검증 처리
 
-    async def stream_regenerate_by_session_id(self, user_id: UUID, session_id: str):
+    async def stream_regenerate_by_session_id(
+        self, user_id: UUID, session_id: str, target_language: str
+    ):
         """세션 ID로 이전 요청 정보를 가져와서 스트리밍 재생성"""
         try:
             logger.info(
@@ -529,6 +549,7 @@ class AIService(BaseService):
                     "type": "start",
                     "session_id": session_id,
                     "regeneration_count": new_regeneration_count,
+                    "target_language": regenerate_language,
                 },
                 ensure_ascii=False,
             )
@@ -538,8 +559,20 @@ class AIService(BaseService):
             total_tokens = 0
             chunk_index = 0
 
+            regenerate_language = original_request.target_language
+            if regenerate_language is not None and hasattr(
+                regenerate_language, "value"
+            ):
+                regenerate_language = regenerate_language.value
+
+            if not regenerate_language:
+                regenerate_language = target_language
+
             async for text_chunk in self._stream_complete_analysis(
-                original_request.prompt, original_request.style, original_request.length
+                original_request.prompt,
+                original_request.style,
+                original_request.length,
+                regenerate_language,
             ):
                 if isinstance(text_chunk, dict) and "tokens_used" in text_chunk:
                     total_tokens = text_chunk["tokens_used"]
@@ -552,6 +585,7 @@ class AIService(BaseService):
                     "accumulated": collected_text,
                     "timestamp": int(time.time() * 1000),
                     "chunk_index": chunk_index,
+                    "target_language": regenerate_language,
                 }
                 chunk_index += 1
                 yield json.dumps(chunk_data, ensure_ascii=False)
@@ -598,6 +632,7 @@ class AIService(BaseService):
                     "keywords": keywords,
                     "style": original_request.style,
                     "length": original_request.length,
+                    "target_language": regenerate_language,
                 },
                 tokens_used=total_tokens,
                 regeneration_count=new_regeneration_count,
@@ -611,11 +646,12 @@ class AIService(BaseService):
                     "type": "complete",
                     "emotion": emotion,
                     "keywords": keywords,
-                    "generated_text": generated_text,
-                    "tokens_used": total_tokens,
-                    "session_id": session_id,
-                    "regeneration_count": new_regeneration_count,
-                },
+                "generated_text": generated_text,
+                "tokens_used": total_tokens,
+                "session_id": session_id,
+                "regeneration_count": new_regeneration_count,
+                "target_language": regenerate_language,
+            },
                 ensure_ascii=False,
             )
 

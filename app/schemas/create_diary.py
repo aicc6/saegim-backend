@@ -1,10 +1,10 @@
-"""
-AI 사용 로그 생성 스키마
-"""
+"""AI 사용 로그 생성 스키마"""
 
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
+
+from app.schemas.localization import LanguageCode
 
 
 class CreateDiaryRequest(BaseModel):
@@ -20,6 +20,10 @@ class CreateDiaryRequest(BaseModel):
         None, description="재생성 세션 ID (카멜케이스, 프론트엔드 호환)"
     )
     uploaded_images: list[dict] | None = Field(None, description="업로드된 이미지 정보")
+    target_language: LanguageCode | None = Field(
+        None,
+        description="생성 결과를 원하는 언어 코드 (ko/en/ja)",
+    )
 
     @field_validator("prompt")
     @classmethod
