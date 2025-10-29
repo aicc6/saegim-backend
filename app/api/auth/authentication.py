@@ -4,6 +4,7 @@
 """
 
 import logging
+from typing import Optional
 from fastapi import (
     APIRouter,
     Cookie,
@@ -124,7 +125,7 @@ async def refresh_token(
     auth_service: AuthServiceDep,
     response: Response,
     http_request: Request,
-    refresh_token: str | None = Cookie(None),
+    refresh_token: Optional[str] = Cookie(None),
 ):
     """JWT 토큰 갱신 API - Refresh Token을 사용하여 새로운 Access Token 발급"""
     if refresh_token is None:
@@ -278,7 +279,7 @@ async def verify_email_change_token(
     auth_service: AuthServiceDep,
     token: str,
     http_request: Request,
-    email: str | None = None,
+    email: Optional[str] = None,
 ):
     """이메일 변경 토큰 검증 API"""
     data = auth_service.verify_email_change_token(token, email)
