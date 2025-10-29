@@ -87,17 +87,7 @@ async def handwriting_to_diary(
         )
 
     # 생성 언어 결정 (요청 > 사용자 설정 > 기본값)
-    if body.target_language is not None:
-        target_language = body.target_language
-    else:
-        try:
-            target_language = (
-                LanguageCode(current_user.preferred_language)
-                if current_user.preferred_language
-                else LanguageCode.KO
-            )
-        except ValueError:
-            target_language = LanguageCode.KO
+    target_language = body.target_language or LanguageCode.KO
 
     # AI 텍스트 생성 (비동기)
     logger.info("AI 다이어리 텍스트 생성 시작")

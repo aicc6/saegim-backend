@@ -17,6 +17,7 @@ from app.core.http_client import http_client
 from app.exceptions.auth import DeletedAccountException
 from app.models.oauth_token import OAuthToken
 from app.models.user import User
+from app.localization.languages import DEFAULT_LANGUAGE
 from app.schemas.auth import GoogleLoginRequest
 from app.schemas.oauth import GoogleOAuthResponse, OAuthUserInfo
 from app.services.base import BaseService
@@ -167,6 +168,7 @@ class GoogleOAuthService(BaseService):
                 account_type=AccountType.SOCIAL.value,
                 provider=OAuthProvider.GOOGLE.value,
                 provider_id=user_info.id,  # 구글 사용자 ID 설정
+                preferred_language=DEFAULT_LANGUAGE,
                 is_active=True,
             )
             tx.add(user)
@@ -375,6 +377,7 @@ class GoogleOAuthService(BaseService):
             account_type=AccountType.SOCIAL.value,
             provider=OAuthProvider.GOOGLE.value,
             provider_id=provider_id,
+            preferred_language=DEFAULT_LANGUAGE,
             is_active=True,
         )
         tx.add(user)

@@ -84,17 +84,7 @@ async def stream_ai_text(
 ):
     """AI 텍스트 실시간 스트리밍 생성"""
 
-    if data.target_language is not None:
-        preferred_language = data.target_language
-    else:
-        try:
-            preferred_language = (
-                LanguageCode(current_user.preferred_language)
-                if current_user and current_user.preferred_language
-                else LanguageCode.KO
-            )
-        except ValueError:
-            preferred_language = LanguageCode.KO
+    preferred_language = data.target_language or LanguageCode.KO
 
     async def generate_stream():
         try:
@@ -149,14 +139,7 @@ async def stream_regenerate_ai_text(
             yield keepalive.encode("utf-8")
             await asyncio.sleep(0.01)  # 즉시 플러시
 
-            try:
-                regenerate_language = (
-                    LanguageCode(current_user.preferred_language)
-                    if current_user and current_user.preferred_language
-                    else LanguageCode.KO
-                )
-            except ValueError:
-                regenerate_language = LanguageCode.KO
+            regenerate_language = LanguageCode.KO
 
             async for chunk in ai_service.stream_regenerate_by_session_id(
                 user_id,

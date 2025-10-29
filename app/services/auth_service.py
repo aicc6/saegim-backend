@@ -30,6 +30,7 @@ from app.models.notification import Notification
 from app.models.oauth_token import OAuthToken
 from app.models.password_reset_token import PasswordResetToken
 from app.models.user import User
+from app.localization.languages import DEFAULT_LANGUAGE
 from app.schemas.auth import (
     ChangePasswordRequest,
     ChangePasswordResponseData,
@@ -1088,6 +1089,7 @@ class AuthService(BaseService):
                 account_type=AccountType.EMAIL.value,
                 provider=None,
                 provider_id=None,
+                preferred_language=DEFAULT_LANGUAGE,
                 is_active=True,
             )
 
