@@ -218,6 +218,7 @@ async def get_my_diaries(
         description="정렬 순서 (asc: 오름차순, desc: 내림차순)",
         regex="^(asc|desc)$",
     ),
+    category_id: Annotated[str | None, Query(description="카테고리 ID 필터")] = None,
 ):
     """JWT 인증된 사용자의 다이어리 목록 조회 (페이지네이션 포함)"""
 
@@ -230,6 +231,7 @@ async def get_my_diaries(
         start_date=start_date,
         end_date=end_date,
         sort_order=sort_order,
+        category_id=category_id,
     )
 
     return DiaryListResponse(

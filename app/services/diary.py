@@ -55,6 +55,7 @@ class DiaryService(BaseService):
         start_date: date | None = None,
         end_date: date | None = None,
         sort_order: str = SortOrder.DESC.value,
+        category_id: str | None = None,
     ):
         """다이어리 목록 조회 (페이지네이션 포함)"""
         # 기본 쿼리 구성 - 이미지 및 카테고리 관계 포함
@@ -78,6 +79,10 @@ class DiaryService(BaseService):
         # 감정별 필터링
         if emotion:
             statement = statement.where(DiaryEntry.user_emotion == emotion)
+
+        # 카테고리별 필터링
+        if category_id is not None:
+            statement = statement.where(DiaryEntry.category_id == category_id)
 
         # 공개 여부 필터링
         if is_public is not None:
