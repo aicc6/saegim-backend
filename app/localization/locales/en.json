@@ -40,7 +40,29 @@
     },
     "diary": {
       "handwriting_saved": "Diary created from handwriting.",
-      "handwriting_preview": "Handwriting preview generated."
+      "handwriting_preview": "Handwriting preview generated.",
+      "list_success": "Diary list retrieved successfully (Total: {count})",
+      "calendar_success": "Calendar diaries retrieved successfully (Total: {count})",
+      "content_get_success": "Diary content retrieved successfully",
+      "get_success": "Diary retrieved successfully",
+      "create_success": "Diary created successfully",
+      "update_success": "Diary updated successfully",
+      "delete_success": "Diary deleted successfully",
+      "delete_message": "The diary has been successfully deleted.",
+      "image_upload_success": "Image uploaded successfully",
+      "image_delete_success": "Image deleted successfully",
+      "image_delete_message": "The image has been successfully deleted.",
+      "images_get_success": "Diary images retrieved successfully (Total: {count})",
+      "temp_images_upload_success": "Images uploaded successfully (Total: {count})",
+      "handwriting_upload_success": "Handwriting image uploaded successfully (Next: text extraction)",
+      "ocr_failed": "Failed to recognize text from the handwriting image. Please check the image and try again."
+    },
+    "category": {
+      "list_success": "Category list retrieved successfully",
+      "create_success": "Category created successfully",
+      "update_success": "Category updated successfully",
+      "delete_success": "Category deleted successfully",
+      "delete_message": "The category has been successfully deleted."
     },
     "localization": {
       "languages_loaded": "Loaded supported languages.",

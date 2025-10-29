@@ -156,10 +156,10 @@ async def handwriting_to_diary(
         logger.info(
             f"다이어리 저장 시작 - user_emotion: {body.user_emotion}, ai_emotion: {ai_emotion}"
         )
-        created_diary = diary_service.create_diary(user_id, request)
+        created_diary = await diary_service.create_diary(user_id, request)
         logger.info(f"다이어리 저장 완료 - diary_id: {created_diary.id}")
 
-       return BaseResponse(
+        return BaseResponse(
            data=DiaryResponseData.model_validate(created_diary).model_dump(),
             message=translate(
                 "diary.handwriting_saved",
@@ -210,6 +210,8 @@ async def handwriting_to_diary(
 async def get_my_diaries(
     diary_service: DiaryServiceDep,
     user_id: CurrentUserId,
+    current_user: CurrentUser,
+    http_request: Request,
     *,
     page: Annotated[int, Query(ge=1, description="페이지 번호")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="페이지 크기")] = 20,
@@ -242,7 +244,12 @@ async def get_my_diaries(
 
     return DiaryListResponse(
         data=[DiaryListResponseData.model_validate(diary) for diary in data],
-        message=f"다이어리 목록 조회 성공 (총 {total_count}개)",
+        message=translate(
+            "diary.list_success",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+            count=total_count,
+        ),
     )
 
 
@@ -253,6 +260,8 @@ async def get_my_diaries(
 async def get_calendar_diaries(
     diary_service: DiaryServiceDep,
     user_id: CurrentUserId,
+    current_user: CurrentUser,
+    http_request: Request,
     *,
     start_date: Annotated[date, Query(description="시작 날짜 (YYYY-MM-DD)")],
     end_date: Annotated[date, Query(description="종료 날짜 (YYYY-MM-DD)")],
@@ -267,7 +276,12 @@ async def get_calendar_diaries(
 
     return DiaryListResponse(
         data=[DiaryListResponseData.model_validate(diary) for diary in data],
-        message=f"캘린더 다이어리 조회 성공 (총 {len(data)}개)",
+        message=translate(
+            "diary.calendar_success",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+            count=len(data),
+        ),
     )
 
 
@@ -278,6 +292,8 @@ async def get_calendar_diaries(
 async def get_diary_content(
     diary_service: DiaryServiceDep,
     user_id: CurrentUserId,
+    current_user: CurrentUser,
+    http_request: Request,
     *,
     diary_id: UUID = Path(..., description="다이어리 ID (UUID)"),
 ):
@@ -287,7 +303,11 @@ async def get_diary_content(
 
     return DiaryContentResponse(
         data=DiaryContentResponseData(id=str(diary.id), content=diary.content),
-        message="다이어리 content 조회 성공",
+        message=translate(
+            "diary.content_get_success",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+        ),
     )
 
 
@@ -298,6 +318,8 @@ async def get_diary_content(
 async def get_diary(
     diary_service: DiaryServiceDep,
     user_id: CurrentUserId,
+    current_user: CurrentUser,
+    http_request: Request,
     *,
     diary_id: UUID = Path(..., description="다이어리 ID (UUID)"),
 ):
@@ -307,7 +329,11 @@ async def get_diary(
 
     return DiaryResponse(
         data=DiaryResponseData.model_validate(data),
-        message="다이어리 조회 성공",
+        message=translate(
+            "diary.get_success",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+        ),
     )
 
 
@@ -318,6 +344,8 @@ async def get_diary(
 async def upload_diary_image(
     diary_service: DiaryServiceDep,
     user_id: CurrentUserId,
+    current_user: CurrentUser,
+    http_request: Request,
     *,
     diary_id: UUID = Path(..., description="다이어리 ID (UUID)"),
     image: Annotated[UploadFile, File(description="업로드할 이미지 파일")],
@@ -328,7 +356,11 @@ async def upload_diary_image(
 
     return UploadImageResponse(
         data=data,
-        message="이미지 업로드 성공",
+        message=translate(
+            "diary.image_upload_success",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+        ),
     )
 
 
@@ -339,6 +371,8 @@ async def upload_diary_image(
 async def delete_diary_image(
     diary_service: DiaryServiceDep,
     user_id: CurrentUserId,
+    current_user: CurrentUser,
+    http_request: Request,
     *,
     diary_id: UUID = Path(..., description="다이어리 ID (UUID)"),
     image_id: UUID = Path(..., description="이미지 ID (UUID)"),
@@ -346,11 +380,21 @@ async def delete_diary_image(
     """다이어리 이미지 삭제"""
     diary_service.delete_diary_image(user_id, diary_id, image_id)
 
-    data = MessageResponseData(message="이미지 삭제 성공")
+    data = MessageResponseData(
+        message=translate(
+            "diary.image_delete_success",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+        )
+    )
 
     return MessageResponse(
         data=data,
-        message="이미지가 성공적으로 삭제되었습니다.",
+        message=translate(
+            "diary.image_delete_message",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+        ),
     )
 
 

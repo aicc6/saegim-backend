@@ -48,8 +48,8 @@ def list_languages(http_request: Request) -> GetLanguagesResponse:
     response_model=GetTranslationsResponse,
 )
 def get_translations(
+    http_request: Request,  # 기본값 없는 인자를 먼저
     locale: str = Path(..., description="요청할 언어 코드 (ko, en, ja)"),
-    http_request: Request,
 ) -> GetTranslationsResponse:
     """Return translation payload for the requested locale.
 
@@ -62,7 +62,7 @@ def get_translations(
         if locale in ENABLED_LANGUAGE_CODES
         else fallback_locale
     )
-
+    
     try:
         translations = load_translations(resolved_locale.value)
     except FileNotFoundError as exc:

@@ -226,10 +226,10 @@ async def update_user_settings(
 async def upload_profile_image(
     auth_service: AuthServiceDep,
     current_user_id: CurrentUserId,
-    *,
-    image: UploadFile = File(description="프로필 이미지 파일"),
     http_request: Request,
     current_user: CurrentUser,
+    *,
+    image: UploadFile = File(description="프로필 이미지 파일"),
 ):
     """프로필 이미지 업로드 API"""
     data = await auth_service.upload_profile_image(current_user_id, image)
@@ -277,8 +277,8 @@ async def send_email_change_verification(
 async def verify_email_change_token(
     auth_service: AuthServiceDep,
     token: str,
-    email: str | None = None,
     http_request: Request,
+    email: str | None = None,
 ):
     """이메일 변경 토큰 검증 API"""
     data = auth_service.verify_email_change_token(token, email)

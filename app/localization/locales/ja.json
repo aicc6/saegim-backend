@@ -40,7 +40,29 @@
     },
     "diary": {
       "handwriting_saved": "手書きから日記を作成しました。",
-      "handwriting_preview": "手書きのプレビューを生成しました。"
+      "handwriting_preview": "手書きのプレビューを生成しました。",
+      "list_success": "日記リストを取得しました（合計: {count}件）",
+      "calendar_success": "カレンダー日記を取得しました（合計: {count}件）",
+      "content_get_success": "日記の内容を取得しました",
+      "get_success": "日記を取得しました",
+      "create_success": "日記を作成しました",
+      "update_success": "日記を更新しました",
+      "delete_success": "日記を削除しました",
+      "delete_message": "日記が正常に削除されました。",
+      "image_upload_success": "画像をアップロードしました",
+      "image_delete_success": "画像を削除しました",
+      "image_delete_message": "画像が正常に削除されました。",
+      "images_get_success": "日記画像を取得しました（合計: {count}件）",
+      "temp_images_upload_success": "画像をアップロードしました（合計: {count}件）",
+      "handwriting_upload_success": "手書き画像をアップロードしました（次：テキスト抽出）",
+      "ocr_failed": "手書き画像からテキストを認識できませんでした。画像を確認してください。"
+    },
+    "category": {
+      "list_success": "カテゴリーリストを取得しました",
+      "create_success": "カテゴリーを作成しました",
+      "update_success": "カテゴリーを更新しました",
+      "delete_success": "カテゴリーを削除しました",
+      "delete_message": "カテゴリーが正常に削除されました。"
     },
     "localization": {
       "languages_loaded": "対応言語一覧を取得しました。",
