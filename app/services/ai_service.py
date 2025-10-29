@@ -816,9 +816,48 @@ class AIService(BaseService):
     async def _integrated_analysis(
         self, prompt: str, style: str, length: str
     ) -> dict[str, Any]:
-        """통합 분석 수행 (감정 분석 및 키워드 추출)"""
+        """통합 분석 수행 (KC-BERT > LLM > 키워드 기반 순서로 감정 분석)"""
         try:
-            analysis_prompt = f"""
+            # 1순위: KC-BERT로 감정 분석 시도
+            from test_kcbert import predict_emotion_with_confidence
+            
+            kcbert_emotion = None
+            kcbert_confidence = None
+            
+            logger.info(f"🔥 KC-BERT 통합 분석 시작 - 입력: '{prompt[:50]}...'")
+            
+            if prompt.strip():
+                try:
+                    result = predict_emotion_with_confidence(prompt)
+                    
+                    if result['success']:
+                        kcbert_emotion = result['emotion']
+                        kcbert_confidence = result['confidence']
+                        logger.info(f"🔥 KC-BERT 감정 분석 성공: {kcbert_emotion} (신뢰도: {kcbert_confidence:.3f})")
+                        
+                        # KC-BERT 한국어 감정을 영어로 변환
+                        kcbert_mapping = {
+                            "평온": "peaceful",
+                            "기쁨": "happy", 
+                            "슬픔": "sad",
+                            "분노": "angry",
+                            "불안": "unrest"
+                        }
+                        kcbert_english_emotion = kcbert_mapping.get(kcbert_emotion, "peaceful")
+                        logger.info(f"🔥 KC-BERT 감정 변환: {kcbert_emotion} -> {kcbert_english_emotion}")
+                        
+                    else:
+                        logger.warning(f"🔥 KC-BERT 감정 분석 실패: {result['error']}")
+                        
+                except Exception as e:
+                    logger.error(f"🔥 KC-BERT 호출 중 오류: {str(e)}")
+
+            # 2순위: LLM 감정 분석 (기존 코드 복원)
+            llm_emotion = None
+            if not kcbert_emotion:  # KC-BERT 실패 시만 LLM 실행
+                logger.info("LLM 감정 분석 시작 (KC-BERT 실패로 인한 fallback)")
+                
+                analysis_prompt = f"""
 <task>
 주어진 사용자 입력을 분석하여 감정 분석과 키워드 추출을 수행해주세요.
 
@@ -846,121 +885,175 @@ class AIService(BaseService):
 </task>
 """
 
-            # 재시도 로직 추가
-            max_retries = 3
-            retry_delay = 1
+                # 재시도 로직 추가
+                max_retries = 3
+                retry_delay = 1
 
-            for attempt in range(max_retries):
+                for attempt in range(max_retries):
+                    try:
+                        response = await self._openai_client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=[{"role": "user", "content": analysis_prompt}],
+                            max_completion_tokens=200,
+                            temperature=0.3,  # 일관성 있는 분석을 위해 낮은 temperature 사용
+                        )
+
+                        content = response.choices[0].message.content.strip()
+                        logger.info(f"통합 분석 원본 응답: {content}")
+
+                        # JSON 파싱 시도
+                        try:
+                            import json as json_lib
+
+                            # JSON 블록 추출 시도
+                            if "```json" in content:
+                                content = (
+                                    content.split("```json")[1].split("```")[0].strip()
+                                )
+                            elif "{" in content and "}" in content:
+                                start = content.find("{")
+                                end = content.rfind("}") + 1
+                                content = content[start:end]
+
+                            analysis_result = json_lib.loads(content)
+
+                            # 결과 검증
+                            if (
+                                "emotion" in analysis_result
+                                and "keywords" in analysis_result
+                            ):
+                                emotion = analysis_result["emotion"]
+                                keywords = analysis_result["keywords"]
+
+                                # 감정 검증
+                                valid_emotions = ["행복", "슬픔", "화남", "평온", "불안"]
+                                if emotion not in valid_emotions:
+                                    logger.warning(
+                                        f"잘못된 감정: {emotion}, 평온으로 기본 설정"
+                                    )
+                                    emotion = "평온"
+
+                                # 한국어 감정을 영어로 변환
+                                llm_english_emotion = self._convert_emotion_to_english(emotion)
+                                logger.info(f"감정 변환: {emotion} -> {llm_english_emotion}")
+                                llm_emotion = llm_english_emotion
+
+                                # 키워드 검증 및 정리
+                                if isinstance(keywords, list):
+                                    keywords = [
+                                        str(kw).strip()
+                                        for kw in keywords
+                                        if str(kw).strip()
+                                    ][
+                                        :5
+                                    ]  # 최대 5개
+                                else:
+                                    keywords = []
+
+                                if not keywords:  # 키워드가 없으면 fallback
+                                    keywords = prompt.split()[:3] if prompt else ["감정"]
+
+                                logger.info(
+                                    f"LLM 통합 분석 완료: emotion={emotion}->{llm_english_emotion}, keywords={keywords}"
+                                )
+                                break  # 성공하면 반복문 종료
+
+                            else:
+                                raise ValueError("응답에 필수 필드가 없습니다")
+
+                        except (
+                            json_lib.JSONDecodeError,
+                            ValueError,
+                            KeyError,
+                        ) as parse_error:
+                            logger.warning(
+                                f"JSON 파싱 실패 ({attempt + 1}/{max_retries}): {parse_error}"
+                            )
+                            if attempt == max_retries - 1:
+                                raise parse_error
+
+                    except Exception as e:
+                        error_message = str(e)
+                        logger.warning(
+                            f"통합 분석 API 호출 실패 ({attempt + 1}/{max_retries}): {error_message}"
+                        )
+
+                        if (
+                            attempt == max_retries - 1
+                            or "rate limit" not in error_message.lower()
+                        ):
+                            break
+
+                        # 재시도 가능한 오류인 경우 지연 후 재시도
+                        await asyncio.sleep(retry_delay * (2**attempt))
+
+            # LLM으로 키워드 추출 (또는 위에서 추출된 키워드 사용)
+            if 'keywords' not in locals():  # LLM 감정 분석에서 키워드를 추출하지 못한 경우
+                keywords_prompt = f"""
+사용자 입력: "{prompt}"
+
+위 입력에서 핵심 키워드 3-5개를 추출해주세요.
+- 감정, 상황, 대상, 행동 등을 포함한 의미있는 키워드
+- 사용자가 직접 언급하지 않아도 핵심 의미를 담은 키워드면 좋습니다
+
+JSON 형식으로만 답해주세요:
+{{"keywords": ["키워드1", "키워드2", "키워드3", "키워드4", "키워드5"]}}
+"""
+
+                keywords = []
                 try:
                     response = await self._openai_client.chat.completions.create(
                         model="gpt-4o-mini",
-                        messages=[{"role": "user", "content": analysis_prompt}],
-                        max_completion_tokens=200,
-                        temperature=0.3,  # 일관성 있는 분석을 위해 낮은 temperature 사용
+                        messages=[{"role": "user", "content": keywords_prompt}],
+                        max_completion_tokens=150,
+                        temperature=0.3,
                     )
 
                     content = response.choices[0].message.content.strip()
-                    logger.info(f"통합 분석 원본 응답: {content}")
+                    logger.info(f"LLM 키워드 추출 원본 응답: {content}")
 
-                    # JSON 파싱 시도
-                    try:
-                        import json as json_lib
+                    import json as json_lib
+                    
+                    # JSON 블록 추출
+                    if "```json" in content:
+                        content = content.split("```json")[1].split("```")[0].strip()
+                    elif "{" in content and "}" in content:
+                        start = content.find("{")
+                        end = content.rfind("}") + 1
+                        content = content[start:end]
 
-                        # JSON 블록 추출 시도
-                        if "```json" in content:
-                            content = (
-                                content.split("```json")[1].split("```")[0].strip()
-                            )
-                        elif "{" in content and "}" in content:
-                            start = content.find("{")
-                            end = content.rfind("}") + 1
-                            content = content[start:end]
-
-                        analysis_result = json_lib.loads(content)
-
-                        # 결과 검증
-                        if (
-                            "emotion" in analysis_result
-                            and "keywords" in analysis_result
-                        ):
-                            emotion = analysis_result["emotion"]
-                            keywords = analysis_result["keywords"]
-
-                            # 감정 검증
-                            valid_emotions = ["행복", "슬픔", "화남", "평온", "불안"]
-                            if emotion not in valid_emotions:
-                                logger.warning(
-                                    f"잘못된 감정: {emotion}, 평온으로 기본 설정"
-                                )
-                                emotion = "평온"
-
-                            # 한국어 감정을 영어로 변환
-                            english_emotion = self._convert_emotion_to_english(emotion)
-                            logger.info(f"감정 변환: {emotion} -> {english_emotion}")
-
-                            # 키워드 검증 및 정리
-                            if isinstance(keywords, list):
-                                keywords = [
-                                    str(kw).strip()
-                                    for kw in keywords
-                                    if str(kw).strip()
-                                ][
-                                    :5
-                                ]  # 최대 5개
-                            else:
-                                keywords = []
-
-                            if not keywords:  # 키워드가 없으면 fallback
-                                keywords = prompt.split()[:3] if prompt else ["감정"]
-
-                            logger.info(
-                                f"통합 분석 완료: emotion={emotion}->{english_emotion}, keywords={keywords}"
-                            )
-                            return {
-                                "emotion": english_emotion,
-                                "keywords": keywords,
-                            }  # 영어 감정 반환
-
-                        else:
-                            raise ValueError("응답에 필수 필드가 없습니다")
-
-                    except (
-                        json_lib.JSONDecodeError,
-                        ValueError,
-                        KeyError,
-                    ) as parse_error:
-                        logger.warning(
-                            f"JSON 파싱 실패 ({attempt + 1}/{max_retries}): {parse_error}"
-                        )
-                        if attempt == max_retries - 1:
-                            raise parse_error
-
+                    keyword_result = json_lib.loads(content)
+                    if "keywords" in keyword_result and isinstance(keyword_result["keywords"], list):
+                        keywords = [str(kw).strip() for kw in keyword_result["keywords"] if str(kw).strip()][:5]
+                        logger.info(f"LLM 키워드 추출 성공: {keywords}")
+                        
                 except Exception as e:
-                    error_message = str(e)
-                    logger.warning(
-                        f"통합 분석 API 호출 실패 ({attempt + 1}/{max_retries}): {error_message}"
-                    )
+                    logger.warning(f"LLM 키워드 추출 실패: {str(e)}")
+                    # Fallback 키워드
+                    keywords = prompt.split()[:3] if prompt else ["감정"]
 
-                    if (
-                        attempt == max_retries - 1
-                        or "rate limit" not in error_message.lower()
-                    ):
-                        raise
+            # 최종 감정 결정: KC-BERT > LLM > 키워드 기반 순서
+            if kcbert_emotion and kcbert_english_emotion:
+                final_emotion = kcbert_english_emotion
+                logger.info(f"🔥 최종 감정 (KC-BERT): {final_emotion}")
+            elif llm_emotion:
+                final_emotion = llm_emotion
+                logger.info(f"🔥 최종 감정 (LLM): {final_emotion}")
+            else:
+                # 3순위: 키워드 기반 감정 분석
+                final_emotion = self._analyze_emotion_from_keywords(prompt)
+                logger.info(f"🔥 최종 감정 (키워드 기반): {final_emotion}")
 
-                    # 재시도 가능한 오류인 경우 지연 후 재시도
-                    await asyncio.sleep(retry_delay * (2**attempt))
-
-            # 모든 재시도가 실패한 경우 (이 라인에 도달하면 안 되지만 타입 체커를 위해)
-            raise Exception("모든 재시도가 실패했습니다")
+            logger.info(f"🔥 통합 분석 완료: emotion={final_emotion}, keywords={keywords}")
+            return {
+                "emotion": final_emotion,
+                "keywords": keywords,
+            }
 
         except Exception as e:
-            logger.error(f"통합 분석 실패: {str(e)}")
-            # Fallback: 키워드 기반 분석
+            logger.error(f"🔥 통합 분석 실패: {str(e)}")
+            # 완전 fallback
             emotion = self._analyze_emotion_from_keywords(prompt)
             keywords = prompt.split()[:3] if prompt else ["감정"]
-            # fallback 감정도 영어로 변환
-            english_emotion = self._convert_emotion_to_english(emotion)
-            logger.info(
-                f"Fallback 통합 분석: emotion={emotion}->{english_emotion}, keywords={keywords}"
-            )
-            return {"emotion": english_emotion, "keywords": keywords}
+            logger.info(f"🔥 완전 Fallback 분석: emotion={emotion}, keywords={keywords}")
+            return {"emotion": emotion, "keywords": keywords}

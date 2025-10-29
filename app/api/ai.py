@@ -5,7 +5,7 @@ AI 텍스트 생성 및 사용 로그 관리
 
 import asyncio
 
-from fastapi import APIRouter, Path, Request
+from fastapi import APIRouter, Path, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
 
 from app.core.deps import (
@@ -22,10 +22,51 @@ from app.schemas.ai import (
 from app.schemas.create_diary import CreateDiaryRequest
 from app.schemas.localization import LanguageCode
 from app.utils.i18n import translate
+from app.schemas.base import BaseResponse
 
 router = APIRouter(
     tags=["AI"],
 )
+
+
+async def preload_kcbert_model():
+    """백그라운드에서 KC-BERT 모델 미리 로딩"""
+    try:
+        from test_kcbert import initialize_predictor
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.info("🔥 백그라운드 KC-BERT 모델 로딩 시작...")
+
+        success = initialize_predictor()
+        if success:
+            logger.info("🔥 백그라운드 KC-BERT 모델 로딩 완료!")
+        else:
+            logger.warning("🔥 백그라운드 KC-BERT 모델 로딩 실패")
+
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"🔥 백그라운드 KC-BERT 모델 로딩 중 오류: {str(e)}")
+
+
+@router.post(
+    "/preload-models",
+    response_model=BaseResponse,
+)
+async def preload_models(
+    background_tasks: BackgroundTasks,
+    user_id: CurrentUserId,
+):
+    """로그인 시 AI 모델들을 백그라운드에서 미리 로딩"""
+
+    # 백그라운드 태스크로 KC-BERT 모델 로딩 추가
+    background_tasks.add_task(preload_kcbert_model)
+
+    return BaseResponse(
+        data={"status": "started", "message": "모델 로딩이 백그라운드에서 시작되었습니다."},
+        message="AI 모델 미리 로딩 시작",
+    )
 
 
 # CHECK: 미사용 여부 확인 필요

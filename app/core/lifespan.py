@@ -3,6 +3,7 @@
 FastAPI lifespan context manager
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -13,6 +14,26 @@ from app.db.database import create_db_and_tables
 logger = logging.getLogger(__name__)
 
 
+async def preload_kcbert_model_background():
+    """서버 부팅 시 백그라운드에서 KC-BERT 모델 미리 로딩"""
+    try:
+        from test_kcbert import initialize_predictor
+        
+        logger.info("🔥 서버 부팅 시 KC-BERT 모델 백그라운드 로딩 시작...")
+        
+        # 비동기적으로 모델 로딩 (다른 초기화 작업을 블로킹하지 않음)
+        await asyncio.sleep(0.1)  # 다른 초기화 작업이 우선 완료되도록 잠시 대기
+        
+        success = initialize_predictor()
+        if success:
+            logger.info("🔥 서버 부팅 시 KC-BERT 모델 백그라운드 로딩 완료!")
+        else:
+            logger.warning("🔥 서버 부팅 시 KC-BERT 모델 백그라운드 로딩 실패")
+            
+    except Exception as e:
+        logger.error(f"🔥 서버 부팅 시 KC-BERT 모델 백그라운드 로딩 중 오류: {str(e)}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -20,6 +41,7 @@ async def lifespan(app: FastAPI):
 
     시작 시:
     - 데이터베이스 테이블 생성
+    - KC-BERT 모델 백그라운드 로딩
     - 필요한 초기화 작업 수행
 
     종료 시:
@@ -35,6 +57,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ 데이터베이스 연결 실패: {e}")
         logger.info("데이터베이스 없이 서버를 시작합니다.")
+
+    # KC-BERT 모델 백그라운드 로딩 시작 (서버 시작을 블로킹하지 않음)
+    asyncio.create_task(preload_kcbert_model_background())
 
     # 기타 초기화 작업 (필요 시 추가)
     # - Redis 연결 확인
