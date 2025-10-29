@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Path, status
+from fastapi import APIRouter, HTTPException, Path, Request, status
 
 from app.localization import (
     DEFAULT_LANGUAGE,
@@ -17,12 +17,13 @@ from app.schemas.localization import (
     TranslationPayload,
     LanguageCode,
 )
+from app.utils.i18n import translate
 
 router = APIRouter(tags=["Localization"])
 
 
 @router.get("/languages", response_model=GetLanguagesResponse)
-def list_languages() -> GetLanguagesResponse:
+def list_languages(http_request: Request) -> GetLanguagesResponse:
     """Return the list of languages supported by the application."""
 
     data = [
@@ -34,7 +35,11 @@ def list_languages() -> GetLanguagesResponse:
 
     return GetLanguagesResponse(
         data=data,
-        message="지원 언어 목록을 불러왔습니다.",
+        message=translate(
+            "localization.languages_loaded",
+            http_request,
+            default="지원 언어 목록을 불러왔습니다.",
+        ),
     )
 
 
@@ -44,6 +49,7 @@ def list_languages() -> GetLanguagesResponse:
 )
 def get_translations(
     locale: str = Path(..., description="요청할 언어 코드 (ko, en, ja)"),
+    http_request: Request,
 ) -> GetTranslationsResponse:
     """Return translation payload for the requested locale.
 
@@ -71,10 +77,12 @@ def get_translations(
         locale=resolved_locale,
     )
 
-    message = (
-        "번역 데이터를 불러왔습니다."
-        if resolved_locale == LanguageCode.KO
-        else "Translations loaded."
+    return GetTranslationsResponse(
+        data=payload,
+        message=translate(
+            "localization.translations_loaded",
+            http_request,
+            user_preferred_language=resolved_locale.value,
+            default="번역 데이터를 불러왔습니다.",
+        ),
     )
-
-    return GetTranslationsResponse(data=payload, message=message)

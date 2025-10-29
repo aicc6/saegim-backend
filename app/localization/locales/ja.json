@@ -13,5 +13,38 @@
     "logout": "ログアウト",
     "profile_updated": "プロフィールが更新されました。",
     "settings_updated": "設定が保存されました。"
+  },
+  "backend": {
+    "auth": {
+      "login_success": "ログインが正常に完了しました。",
+      "logout_success": "ログアウトが完了しました。",
+      "refresh_success": "トークンが正常に更新されました。",
+      "me_success": "現在のユーザー情報を取得しました。",
+      "profile_update_success": "プロフィールが正常に更新されました。",
+      "settings_update_success": "ユーザー設定を保存しました。",
+      "profile_image_upload_success": "プロフィール画像をアップロードしました。",
+      "email_change_verification_sent": "メール変更の認証メールを送信しました。",
+      "email_change_token_verified": "トークンの検証に成功しました。",
+      "email_change_completed": "メールアドレスを更新しました。再度ログインしてください。",
+      "account_withdrawn": "アカウントの退会が完了しました。",
+      "password_reset_email_sent": "パスワード再設定メールを送信しました。",
+      "password_reset_code_verified": "認証コードを確認しました。",
+      "password_reset_success": "パスワードを変更しました。",
+      "password_verified": "パスワードを確認しました。",
+      "restore_email_sent": "アカウント復旧メールを送信しました。",
+      "account_restored": "アカウントを復旧しました。",
+      "google_login_success": "Googleログインが正常に完了しました。"
+    },
+    "ai": {
+      "usage_log_created": "AIの利用ログを作成しました。"
+    },
+    "diary": {
+      "handwriting_saved": "手書きから日記を作成しました。",
+      "handwriting_preview": "手書きのプレビューを生成しました。"
+    },
+    "localization": {
+      "languages_loaded": "対応言語一覧を取得しました。",
+      "translations_loaded": "翻訳データを取得しました。"
+    }
   }
 }

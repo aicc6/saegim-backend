@@ -13,5 +13,38 @@
     "logout": "로그아웃",
     "profile_updated": "프로필이 성공적으로 업데이트되었습니다.",
     "settings_updated": "설정이 성공적으로 저장되었습니다."
+  },
+  "backend": {
+    "auth": {
+      "login_success": "로그인이 성공적으로 완료되었습니다.",
+      "logout_success": "로그아웃이 완료되었습니다.",
+      "refresh_success": "토큰이 성공적으로 갱신되었습니다.",
+      "me_success": "현재 사용자 정보를 성공적으로 조회했습니다.",
+      "profile_update_success": "프로필이 성공적으로 업데이트되었습니다.",
+      "settings_update_success": "사용자 설정이 성공적으로 업데이트되었습니다.",
+      "profile_image_upload_success": "프로필 이미지가 성공적으로 업로드되었습니다.",
+      "email_change_verification_sent": "이메일 변경 인증 이메일이 성공적으로 발송되었습니다.",
+      "email_change_token_verified": "토큰 검증 성공",
+      "email_change_completed": "이메일 변경이 완료되었습니다. 보안을 위해 다시 로그인해주세요.",
+      "account_withdrawn": "계정 탈퇴가 성공적으로 처리되었습니다.",
+      "password_reset_email_sent": "비밀번호 재설정 이메일을 발송했습니다.",
+      "password_reset_code_verified": "인증코드가 확인되었습니다.",
+      "password_reset_success": "비밀번호가 성공적으로 변경되었습니다.",
+      "password_verified": "비밀번호가 정상적으로 확인되었습니다.",
+      "restore_email_sent": "복구 이메일이 성공적으로 발송되었습니다.",
+      "account_restored": "계정이 복구되었습니다.",
+      "google_login_success": "구글 로그인이 성공적으로 완료되었습니다."
+    },
+    "ai": {
+      "usage_log_created": "AI 사용 로그가 생성되었습니다."
+    },
+    "diary": {
+      "handwriting_saved": "손글씨 인식 후 다이어리 생성 완료",
+      "handwriting_preview": "손글씨 인식 및 AI 다이어리 미리보기 생성 완료"
+    },
+    "localization": {
+      "languages_loaded": "지원 언어 목록을 불러왔습니다.",
+      "translations_loaded": "번역 데이터를 불러왔습니다."
+    }
   }
 }

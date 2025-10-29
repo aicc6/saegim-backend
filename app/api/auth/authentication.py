@@ -9,6 +9,7 @@ from fastapi import (
     Cookie,
     Depends,
     HTTPException,
+    Request,
     Response,
     File,
     UploadFile,
@@ -56,6 +57,7 @@ from app.schemas.auth import (
     WithdrawRequest,
 )
 from app.utils.cookie import CookieUtils
+from app.utils.i18n import translate
 
 
 router = APIRouter(tags=["Authentication"])
@@ -73,18 +75,23 @@ logger = logging.getLogger(__name__)
 @router.post("/login", response_model=LoginResponse)
 async def login(
     auth_service: AuthServiceDep,
-    request: LoginRequest,
+    payload: LoginRequest,
     response: Response,
+    http_request: Request,
 ):
     """이메일 로그인 API"""
-    data, access_token, refresh_token = auth_service.login(request)
+    data, access_token, refresh_token = auth_service.login(payload)
 
     # 쿠키에 토큰 설정 (환경별 동적 설정)
     CookieUtils.set_auth_cookies(response, access_token, refresh_token)
 
     return LoginResponse(
         data=data,
-        message="로그인이 성공적으로 완료되었습니다.",
+        message=translate(
+            "auth.login_success",
+            http_request,
+            default="로그인이 성공적으로 완료되었습니다.",
+        ),
     )
 
 
@@ -93,6 +100,8 @@ async def logout(
     auth_service: AuthServiceDep,
     current_user_id: CurrentUserId,
     response: Response,
+    http_request: Request,
+    current_user: CurrentUser,
 ):
     """로그아웃 API - 구글 OAuth 세션 정리, JWT 토큰 무효화, 쿠키 정리"""
     data = await auth_service.logout(current_user_id)
@@ -101,7 +110,12 @@ async def logout(
 
     return LogoutResponse(
         data=data,
-        message="로그아웃이 완료되었습니다",
+        message=translate(
+            "auth.logout_success",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+            default="로그아웃이 완료되었습니다",
+        ),
     )
 
 
@@ -109,6 +123,7 @@ async def logout(
 async def refresh_token(
     auth_service: AuthServiceDep,
     response: Response,
+    http_request: Request,
     refresh_token: str | None = Cookie(None),
 ):
     """JWT 토큰 갱신 API - Refresh Token을 사용하여 새로운 Access Token 발급"""
@@ -124,7 +139,11 @@ async def refresh_token(
 
     return RefreshTokenResponse(
         data=data,
-        message="토큰이 성공적으로 갱신되었습니다.",
+        message=translate(
+            "auth.refresh_success",
+            http_request,
+            default="토큰이 성공적으로 갱신되었습니다.",
+        ),
     )
 
 
@@ -132,13 +151,20 @@ async def refresh_token(
 async def get_current_user_info(
     auth_service: AuthServiceDep,
     current_user_id: CurrentUserId,
+    http_request: Request,
+    current_user: CurrentUser,
 ):
     """현재 로그인한 사용자 정보 조회 API"""
     data = auth_service.get_current_user_info(current_user_id)
 
     return GetCurrentUserInfoResponse(
         data=data,
-        message="현재 사용자 정보를 성공적으로 조회했습니다.",
+        message=translate(
+            "auth.me_success",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+            default="현재 사용자 정보를 성공적으로 조회했습니다.",
+        ),
     )
 
 
@@ -147,13 +173,20 @@ async def update_user_profile(
     auth_service: AuthServiceDep,
     current_user_id: CurrentUserId,
     request: UpdateUserProfileRequest,
+    http_request: Request,
+    current_user: CurrentUser,
 ):
     """사용자 프로필 업데이트 API"""
     data = auth_service.update_user_profile(current_user_id, request)
 
     return UpdateUserProfileResponse(
         data=data,
-        message="프로필이 성공적으로 업데이트되었습니다.",
+        message=translate(
+            "auth.profile_update_success",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+            default="프로필이 성공적으로 업데이트되었습니다.",
+        ),
     )
 
 
@@ -161,14 +194,27 @@ async def update_user_profile(
 async def update_user_settings(
     auth_service: AuthServiceDep,
     current_user_id: CurrentUserId,
-    request: UpdateUserSettingsRequest,
+    payload: UpdateUserSettingsRequest,
+    http_request: Request,
+    current_user: CurrentUser,
 ):
     """사용자 설정 업데이트 API"""
-    data = auth_service.update_user_settings(current_user_id, request)
+    data = auth_service.update_user_settings(current_user_id, payload)
+
+    preferred_language = (
+        data.preferred_language.value
+        if data.preferred_language is not None
+        else current_user.preferred_language
+    )
 
     return UpdateUserSettingsResponse(
         data=data,
-        message="사용자 설정이 성공적으로 업데이트되었습니다.",
+        message=translate(
+            "auth.settings_update_success",
+            http_request,
+            user_preferred_language=preferred_language,
+            default="사용자 설정이 성공적으로 업데이트되었습니다.",
+        ),
     )
 
 
@@ -182,13 +228,20 @@ async def upload_profile_image(
     current_user_id: CurrentUserId,
     *,
     image: UploadFile = File(description="프로필 이미지 파일"),
+    http_request: Request,
+    current_user: CurrentUser,
 ):
     """프로필 이미지 업로드 API"""
     data = await auth_service.upload_profile_image(current_user_id, image)
 
     return UploadProfileImageResponse(
         data=data,
-        message="프로필 이미지가 성공적으로 업로드되었습니다.",
+        message=translate(
+            "auth.profile_image_upload_success",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+            default="프로필 이미지가 성공적으로 업로드되었습니다.",
+        ),
     )
 
 
@@ -201,6 +254,8 @@ async def send_email_change_verification(
     auth_service: AuthServiceDep,
     current_user_id: CurrentUserId,
     request: SendEmailChangeVerificationRequest,
+    http_request: Request,
+    current_user: CurrentUser,
 ):
     """이메일 변경을 위한 인증 URL 발송 API"""
     data = await auth_service.send_email_change_verification(
@@ -209,7 +264,12 @@ async def send_email_change_verification(
 
     return SendEmailChangeVerificationResponse(
         data=data,
-        message="이메일 변경 인증 이메일이 성공적으로 발송되었습니다.",
+        message=translate(
+            "auth.email_change_verification_sent",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+            default="이메일 변경 인증 이메일이 성공적으로 발송되었습니다.",
+        ),
     )
 
 
@@ -218,13 +278,18 @@ async def verify_email_change_token(
     auth_service: AuthServiceDep,
     token: str,
     email: str | None = None,
+    http_request: Request,
 ):
     """이메일 변경 토큰 검증 API"""
     data = auth_service.verify_email_change_token(token, email)
 
     return VerifyEmailChangeTokenResponse(
         data=data,
-        message="토큰 검증 성공",
+        message=translate(
+            "auth.email_change_token_verified",
+            http_request,
+            default="토큰 검증 성공",
+        ),
     )
 
 
@@ -236,13 +301,20 @@ async def verify_password_and_change_email(
     auth_service: AuthServiceDep,
     current_user_id: CurrentUserId,
     request: VerifyPasswordAndChangeEmailRequest,
+    http_request: Request,
+    current_user: CurrentUser,
 ):
     """토큰 검증 및 비밀번호 확인 후 이메일 변경 API"""
     data = auth_service.verify_password_and_change_email(current_user_id, request)
 
     return VerifyPasswordAndChangeEmailResponse(
         data=data,
-        message="이메일 변경이 완료되었습니다. 보안을 위해 다시 로그인해주세요.",
+        message=translate(
+            "auth.email_change_completed",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+            default="이메일 변경이 완료되었습니다. 보안을 위해 다시 로그인해주세요.",
+        ),
     )
 
 
@@ -253,6 +325,8 @@ async def withdraw_account(
     current_user_id: CurrentUserId,
     request: WithdrawRequest,
     response: Response,
+    http_request: Request,
+    current_user: CurrentUser,
 ):
     """회원 탈퇴 API"""
     data = auth_service.withdraw_account(current_user_id, request)
@@ -261,7 +335,12 @@ async def withdraw_account(
 
     return WithdrawAccountResponse(
         data=data,
-        message="계정 탈퇴가 성공적으로 처리되었습니다.",
+        message=translate(
+            "auth.account_withdrawn",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+            default="계정 탈퇴가 성공적으로 처리되었습니다.",
+        ),
     )
 
 
@@ -275,6 +354,7 @@ async def withdraw_account(
 async def send_password_reset_email(
     auth_service: AuthServiceDep,
     request: SendPasswordResetEmailRequest,
+    http_request: Request,
 ):
     """
     비밀번호 재설정 이메일 발송
@@ -290,7 +370,11 @@ async def send_password_reset_email(
 
     return SendPasswordResetEmailResponse(
         data=data,
-        message="비밀번호 재설정 이메일을 발송했습니다.",
+        message=translate(
+            "auth.password_reset_email_sent",
+            http_request,
+            default="비밀번호 재설정 이메일을 발송했습니다.",
+        ),
     )
 
 
@@ -298,6 +382,7 @@ async def send_password_reset_email(
 async def verify_password_reset_code(
     auth_service: AuthServiceDep,
     request: VerifyPasswordResetCodeRequest,
+    http_request: Request,
 ):
     """
     비밀번호 재설정 인증코드 확인
@@ -313,7 +398,11 @@ async def verify_password_reset_code(
 
     return VerifyPasswordResetCodeResponse(
         data=data,
-        message="인증코드가 확인되었습니다.",
+        message=translate(
+            "auth.password_reset_code_verified",
+            http_request,
+            default="인증코드가 확인되었습니다.",
+        ),
     )
 
 
@@ -321,6 +410,7 @@ async def verify_password_reset_code(
 async def reset_password(
     auth_service: AuthServiceDep,
     request: ResetPasswordRequest,
+    http_request: Request,
 ):
     """
     비밀번호 재설정
@@ -336,7 +426,11 @@ async def reset_password(
 
     return ResetPasswordResponse(
         data=data,
-        message="비밀번호가 성공적으로 변경되었습니다.",
+        message=translate(
+            "auth.password_reset_success",
+            http_request,
+            default="비밀번호가 성공적으로 변경되었습니다.",
+        ),
     )
 
 
@@ -351,6 +445,8 @@ async def change_password(
     auth_service: AuthServiceDep,
     current_user_id: CurrentUserId,
     request: ChangePasswordRequest,
+    http_request: Request,
+    current_user: CurrentUser,
 ):
     """
     비밀번호 변경
@@ -367,7 +463,12 @@ async def change_password(
 
     return ChangePasswordResponse(
         data=data,
-        message="비밀번호가 성공적으로 변경되었습니다.",
+        message=translate(
+            "auth.password_reset_success",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+            default="비밀번호가 성공적으로 변경되었습니다.",
+        ),
     )
 
 
@@ -379,6 +480,7 @@ async def verify_password(
     auth_service: AuthServiceDep,
     current_user: CurrentUser,
     request: VerifyPasswordRequest,
+    http_request: Request,
 ):
     """
     현재 비밀번호 확인
@@ -394,7 +496,12 @@ async def verify_password(
 
     return VerifyPasswordResponse(
         data=data,
-        message="비밀번호가 정상적으로 확인되었습니다.",
+        message=translate(
+            "auth.password_verified",
+            http_request,
+            user_preferred_language=current_user.preferred_language,
+            default="비밀번호가 정상적으로 확인되었습니다.",
+        ),
     )
 
 
@@ -410,6 +517,7 @@ async def verify_password(
 async def send_restore_email(
     auth_service: AuthServiceDep,
     request: SendRestoreEmailRequest,
+    http_request: Request,
 ):
     """
     복구 이메일 발송 API
@@ -424,7 +532,11 @@ async def send_restore_email(
 
     return SendRestoreEmailResponse(
         data=data,
-        message="복구 이메일이 성공적으로 발송되었습니다.",
+        message=translate(
+            "auth.restore_email_sent",
+            http_request,
+            default="복구 이메일이 성공적으로 발송되었습니다.",
+        ),
     )
 
 
@@ -435,6 +547,7 @@ async def send_restore_email(
 async def restore_account(
     auth_service: AuthServiceDep,
     request: RestoreAccountRequest,
+    http_request: Request,
 ):
     """
     계정 복구 API
@@ -450,24 +563,33 @@ async def restore_account(
 
     return RestoreAccountResponse(
         data=data,
-        message="계정이 복구되었습니다.",
+        message=translate(
+            "auth.account_restored",
+            http_request,
+            default="계정이 복구되었습니다.",
+        ),
     )
 
 
 @router.post("/google-login", response_model=LoginResponse)
 async def google_login_with_id_token(
     auth_service: AuthServiceDep,
-    request: GoogleLoginRequest,
+    payload: GoogleLoginRequest,
     response: Response,
+    http_request: Request,
 ):
     """Google ID 토큰을 이용한 모바일 로그인 엔드포인트"""
     data, access_token, refresh_token = await auth_service.google_login_with_id_token(
-        request
+        payload
     )
 
     CookieUtils.set_auth_cookies(response, access_token, refresh_token)
 
     return LoginResponse(
         data=data,
-        message="구글 로그인이 성공적으로 완료되었습니다.",
+        message=translate(
+            "auth.google_login_success",
+            http_request,
+            default="구글 로그인이 성공적으로 완료되었습니다.",
+        ),
     )

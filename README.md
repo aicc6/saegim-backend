@@ -213,6 +213,7 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 - JSON은 중첩 키 형태(`app.name`, `navigation.home` 등)를 그대로 유지합니다.
 - 프론트엔드는 초기 진입 시 `GET /translations/{locale}`로 번역 데이터를 가져오거나 서버 렌더링 시 해당 JSON을 프리로드하면 됩니다.
 - 새 키를 추가할 땐 `app/localization/locales/*.json` 파일을 동일한 구조로 모두 갱신해주세요.
+- 백엔드 응답 메시지(`message`)는 사용자 선호 언어 또는 `Accept-Language` 헤더를 기반으로 자동 번역됩니다. 새 메시지를 추가할 땐 `backend.*` 키를 정의하세요.
 
 ### AI 생성 API (`/api/ai`)
 

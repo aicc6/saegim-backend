@@ -13,5 +13,38 @@
     "logout": "Log Out",
     "profile_updated": "Profile updated successfully.",
     "settings_updated": "Settings saved successfully."
+  },
+  "backend": {
+    "auth": {
+      "login_success": "Login completed successfully.",
+      "logout_success": "You have been logged out.",
+      "refresh_success": "Tokens refreshed successfully.",
+      "me_success": "Fetched current user information.",
+      "profile_update_success": "Profile updated successfully.",
+      "settings_update_success": "User settings saved successfully.",
+      "profile_image_upload_success": "Profile image uploaded successfully.",
+      "email_change_verification_sent": "Verification email for address change sent.",
+      "email_change_token_verified": "Token verified successfully.",
+      "email_change_completed": "Email updated. Please sign in again for security.",
+      "account_withdrawn": "Account deletion completed.",
+      "password_reset_email_sent": "Password reset email sent.",
+      "password_reset_code_verified": "Verification code confirmed.",
+      "password_reset_success": "Password changed successfully.",
+      "password_verified": "Password verified successfully.",
+      "restore_email_sent": "Account recovery email sent.",
+      "account_restored": "Account restored successfully.",
+      "google_login_success": "Google login completed successfully."
+    },
+    "ai": {
+      "usage_log_created": "AI usage log created successfully."
+    },
+    "diary": {
+      "handwriting_saved": "Diary created from handwriting.",
+      "handwriting_preview": "Handwriting preview generated."
+    },
+    "localization": {
+      "languages_loaded": "Loaded supported languages.",
+      "translations_loaded": "Loaded translation data."
+    }
   }
 }

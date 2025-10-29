@@ -5,7 +5,7 @@ AI 텍스트 생성 및 사용 로그 관리
 
 import asyncio
 
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Path, Request
 from fastapi.responses import StreamingResponse
 
 from app.core.deps import (
@@ -21,6 +21,7 @@ from app.schemas.ai import (
 )
 from app.schemas.create_diary import CreateDiaryRequest
 from app.schemas.localization import LanguageCode
+from app.utils.i18n import translate
 
 router = APIRouter(
     tags=["AI"],
@@ -36,6 +37,7 @@ async def create_ai_usage_log(
     create_ai_usage_log_service: CreateAIUsageLogServiceDep,
     user_id: CurrentUserId,
     request: CreateAiUsageLogRequest,
+    http_request: Request,
 ):
     """AI 사용 로그 생성"""
     data = await create_ai_usage_log_service.create_ai_usage_log(
@@ -45,7 +47,11 @@ async def create_ai_usage_log(
 
     return CreateAiUsageLogResponse(
         data=data,
-        message="AI 사용 로그가 생성되었습니다.",
+        message=translate(
+            "ai.usage_log_created",
+            http_request,
+            default="AI 사용 로그가 생성되었습니다.",
+        ),
     )
 
 

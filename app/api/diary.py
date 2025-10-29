@@ -14,6 +14,7 @@ from fastapi import (
     HTTPException,
     Path,
     Query,
+    Request,
     UploadFile,
     status,
 )
@@ -38,6 +39,7 @@ from app.schemas.diary import (
     UploadImageResponse,
 )
 from app.schemas.localization import LanguageCode
+from app.utils.i18n import translate
 from app.utils.minio_upload import (
     upload_image_with_thumbnail_to_minio,
 )
@@ -57,6 +59,7 @@ async def handwriting_to_diary(
     diary_service: DiaryServiceDep,
     user_id: CurrentUserId,
     current_user: CurrentUser,
+    http_request: Request,
     *,
     body: HandwritingToDiaryRequest = Body(...),
 ):
@@ -156,9 +159,14 @@ async def handwriting_to_diary(
         created_diary = diary_service.create_diary(user_id, request)
         logger.info(f"다이어리 저장 완료 - diary_id: {created_diary.id}")
 
-        return BaseResponse(
-            data=DiaryResponseData.model_validate(created_diary).model_dump(),
-            message="손글씨 인식 후 다이어리 생성 완료",
+       return BaseResponse(
+           data=DiaryResponseData.model_validate(created_diary).model_dump(),
+            message=translate(
+                "diary.handwriting_saved",
+                http_request,
+                user_preferred_language=target_language.value,
+                default="손글씨 인식 후 다이어리 생성 완료",
+            ),
         )
     else:
         # 미리보기 데이터만 반환 (저장하지 않음)
@@ -189,7 +197,12 @@ async def handwriting_to_diary(
         logger.info("다이어리 미리보기 데이터 생성 완료 (저장하지 않음)")
     return BaseResponse(
         data=preview_data,
-        message="손글씨 인식 및 AI 다이어리 미리보기 생성 완료",
+        message=translate(
+            "diary.handwriting_preview",
+            http_request,
+            user_preferred_language=target_language.value,
+            default="손글씨 인식 및 AI 다이어리 미리보기 생성 완료",
+        ),
     )
 
 
