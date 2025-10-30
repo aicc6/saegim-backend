@@ -218,9 +218,9 @@ pipeline {
 
         // 5. Docker 컨테이너 배포
         stage('🚀 Deploy') {
-            when {
-                environment name: 'DOCKER_PUSH_SUCCESS', value: 'true'
-            }
+            // when {
+            //     environment name: 'DOCKER_PUSH_SUCCESS', value: 'true'
+            // }
             steps {
                 script {
                     def currentBranch = env.CURRENT_BRANCH ?: 'develop'
