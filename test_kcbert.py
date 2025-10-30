@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class KCBERTEmotionPredictor:
     """KC-BERT 감정 분류 예측기"""
     
-    def __init__(self, model_path: str = "ml_models/kcbert"):
+    def __init__(self, model_path: str = "sl-seongjunlee/saegim-kcbert"):
         self.model_path = model_path
         self.model = None
         self.tokenizer = None
@@ -41,32 +41,41 @@ class KCBERTEmotionPredictor:
         try:
             logger.info(f"KC-BERT 모델 로딩 시작... (경로: {self.model_path})")
             
-            # 모델 경로 확인
-            if not os.path.exists(self.model_path):
-                logger.error(f"❌ 모델 경로가 존재하지 않습니다: {self.model_path}")
-                return False
+            # 허깅페이스 모델인지 로컬 모델인지 확인
+            is_huggingface_model = not os.path.exists(self.model_path)
             
-            # 라벨 매핑 로드
-            label_mapping_path = os.path.join(self.model_path, "label_mapping.json")
-            if (os.path.exists(label_mapping_path)):
-                with open(label_mapping_path, 'r', encoding='utf-8') as f:
-                    label_data = json.load(f)
-                    # id2label 형식으로 변환
-                    if "id2label" in label_data:
-                        self.label_mapping = label_data["id2label"]
-                    else:
-                        self.label_mapping = label_data
-                logger.info(f"✅ 라벨 매핑 로드 완료: {self.label_mapping}")
+            if not is_huggingface_model:
+                # 로컬 모델인 경우 기존 로직
+                label_mapping_path = os.path.join(self.model_path, "label_mapping.json")
+                if (os.path.exists(label_mapping_path)):
+                    with open(label_mapping_path, 'r', encoding='utf-8') as f:
+                        label_data = json.load(f)
+                        # id2label 형식으로 변환
+                        if "id2label" in label_data:
+                            self.label_mapping = label_data["id2label"]
+                        else:
+                            self.label_mapping = label_data
+                    logger.info(f"✅ 라벨 매핑 로드 완료: {self.label_mapping}")
+                else:
+                    # 기본 감정 라벨 (한국어) - 5가지
+                    self.label_mapping = {
+                        "0": "기쁨",
+                        "1": "슬픔", 
+                        "2": "분노",
+                        "3": "평온",
+                        "4": "불안"
+                    }
+                    logger.warning("⚠️ label_mapping.json을 찾을 수 없어 기본 매핑을 사용합니다.")
             else:
-                # 기본 감정 라벨 (한국어) - 5가지
+                # 허깅페이스 모델인 경우 기본 매핑 사용
                 self.label_mapping = {
-                    "0": "평온",
-                    "1": "기쁨",
-                    "2": "슬픔", 
-                    "3": "분노",
+                    "0": "기쁨",
+                    "1": "슬픔", 
+                    "2": "분노",
+                    "3": "평온",
                     "4": "불안"
                 }
-                logger.warning("⚠️ label_mapping.json을 찾을 수 없어 기본 매핑을 사용합니다.")
+                logger.info(f"✅ 허깅페이스 모델용 기본 라벨 매핑 사용: {self.label_mapping}")
             
             # 토크나이저 로드
             logger.info("토크나이저 로딩 중...")
@@ -143,7 +152,7 @@ class KCBERTEmotionPredictor:
 # 전역 예측기 인스턴스
 predictor = None
 
-def initialize_predictor(model_path: str = "ml_models/kcbert") -> bool:
+def initialize_predictor(model_path: str = "sl-seongjunlee/saegim-kcbert") -> bool:
     """예측기를 초기화합니다."""
     global predictor
     try:
@@ -153,7 +162,7 @@ def initialize_predictor(model_path: str = "ml_models/kcbert") -> bool:
         logger.error(f"❌ 예측기 초기화 실패: {str(e)}")
         return False
 
-def predict_emotion_with_confidence(text: str, model_path: str = "ml_models/kcbert") -> Dict[str, any]:
+def predict_emotion_with_confidence(text: str, model_path: str = "sl-seongjunlee/saegim-kcbert") -> Dict[str, any]:
     """
     텍스트에서 감정과 신뢰도를 예측하는 메인 함수
     

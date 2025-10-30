@@ -64,9 +64,9 @@ class AIService(BaseService):
 
         # 한국어 감정을 영어로 변환하는 매핑
         self.emotion_mapping = {
-            "행복": "happy",
+            "기쁨": "happy",
             "슬픔": "sad",
-            "화남": "angry",
+            "분노": "angry",
             "평온": "peaceful",
             "불안": "unrest",
         }

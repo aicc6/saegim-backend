@@ -36,45 +36,27 @@ class KCBERTEmotionService:
     def _load_model(self):
         """KC-BERT 모델과 토크나이저 로드"""
         try:
-            # 모델 경로 설정
-            model_path = Path(__file__).parent.parent.parent / "model"
+            # 허깅페이스 모델 경로 설정
+            model_path = "sl-seongjunlee/saegim-kcbert"
             
-            if not model_path.exists():
-                logger.warning(f"KC-BERT 모델 디렉터리가 없습니다: {model_path}")
-                logger.warning("KC-BERT 모델 없이 실행됩니다. LLM 감정 분석을 사용합니다.")
-                return
+            logger.info(f"KC-BERT 모델 로딩 시작 (허깅페이스): {model_path}")
 
-            logger.info(f"KC-BERT 모델 로딩 시작: {model_path}")
-
-            # label_mapping.json 로드
-            label_mapping_path = model_path / "label_mapping.json"
-            if label_mapping_path.exists():
-                with open(label_mapping_path, "r", encoding="utf-8") as f:
-                    self._label_mapping = json.load(f)
-                logger.info(f"라벨 매핑 로드 완료: {self._label_mapping}")
-            else:
-                # 기본 라벨 매핑 (일반적인 5가지 감정)
-                self._label_mapping = {
-                    0: "기쁨",
-                    1: "슬픔", 
-                    2: "분노",
-                    3: "평온",
-                    4: "불안"
-                }
-                logger.warning(f"label_mapping.json이 없어 기본 매핑 사용: {self._label_mapping}")
+            # 기본 라벨 매핑 (허깅페이스 모델용)
+            self._label_mapping = {
+                0: "기쁨",
+                1: "슬픔",
+                2: "분노", 
+                3: "평온",
+                4: "불안"
+            }
+            logger.info(f"허깅페이스 모델용 라벨 매핑 사용: {self._label_mapping}")
 
             # 토크나이저 로드
-            self._tokenizer = AutoTokenizer.from_pretrained(
-                str(model_path),
-                trust_remote_code=True
-            )
+            self._tokenizer = AutoTokenizer.from_pretrained(model_path)
             logger.info("KC-BERT 토크나이저 로드 완료")
 
             # 모델 로드
-            self._model = AutoModelForSequenceClassification.from_pretrained(
-                str(model_path),
-                trust_remote_code=True
-            )
+            self._model = AutoModelForSequenceClassification.from_pretrained(model_path)
             
             # GPU 사용 가능시 GPU로 이동
             if torch.cuda.is_available():

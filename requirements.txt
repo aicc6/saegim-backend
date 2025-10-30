@@ -63,3 +63,8 @@ openai==1.68.0
 json-repair==0.*
 types-psutil==7.0.0.20251001
 asyncpg==0.30.0
+
+# 허깅페이스 및 딥러닝
+torch>=2.0.0
+transformers>=4.30.0
+tokenizers>=0.13.0
