@@ -266,6 +266,7 @@ pipeline {
                             --health-interval=30s \\
                             --health-timeout=10s \\
                             --health-retries=3 \\
+                            -p 9000:49000 \\
                             ${DOCKER_IMAGE}:${BUILD_NUMBER}
 
                         # 이전 이미지 정리 (선택사항)

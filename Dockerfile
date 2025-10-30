@@ -87,11 +87,11 @@ RUN mkdir -p /app/logs && \
 USER saegim
 
 # 포트 노출
-EXPOSE 8000
+EXPOSE 9000
 
 # 헬스체크 설정
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:9000/health || exit 1
 
 # 시작 명령어
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9000", "--workers", "1", "--log-level", "info"]
