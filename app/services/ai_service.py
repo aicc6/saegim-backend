@@ -549,7 +549,7 @@ class AIService(BaseService):
                     "type": "start",
                     "session_id": session_id,
                     "regeneration_count": new_regeneration_count,
-                    "target_language": regenerate_language,
+                    "target_language": target_language,
                 },
                 ensure_ascii=False,
             )
@@ -646,12 +646,12 @@ class AIService(BaseService):
                     "type": "complete",
                     "emotion": emotion,
                     "keywords": keywords,
-                "generated_text": generated_text,
-                "tokens_used": total_tokens,
-                "session_id": session_id,
-                "regeneration_count": new_regeneration_count,
-                "target_language": regenerate_language,
-            },
+                    "generated_text": generated_text,
+                    "tokens_used": total_tokens,
+                    "session_id": session_id,
+                    "regeneration_count": new_regeneration_count,
+                    "target_language": regenerate_language,
+                },
                 ensure_ascii=False,
             )
 
@@ -820,35 +820,41 @@ class AIService(BaseService):
         try:
             # 1순위: KC-BERT로 감정 분석 시도
             from test_kcbert import predict_emotion_with_confidence
-            
+
             kcbert_emotion = None
             kcbert_confidence = None
-            
+
             logger.info(f"🔥 KC-BERT 통합 분석 시작 - 입력: '{prompt[:50]}...'")
-            
+
             if prompt.strip():
                 try:
                     result = predict_emotion_with_confidence(prompt)
-                    
-                    if result['success']:
-                        kcbert_emotion = result['emotion']
-                        kcbert_confidence = result['confidence']
-                        logger.info(f"🔥 KC-BERT 감정 분석 성공: {kcbert_emotion} (신뢰도: {kcbert_confidence:.3f})")
-                        
+
+                    if result["success"]:
+                        kcbert_emotion = result["emotion"]
+                        kcbert_confidence = result["confidence"]
+                        logger.info(
+                            f"🔥 KC-BERT 감정 분석 성공: {kcbert_emotion} (신뢰도: {kcbert_confidence:.3f})"
+                        )
+
                         # KC-BERT 한국어 감정을 영어로 변환
                         kcbert_mapping = {
                             "평온": "peaceful",
-                            "기쁨": "happy", 
+                            "기쁨": "happy",
                             "슬픔": "sad",
                             "분노": "angry",
-                            "불안": "unrest"
+                            "불안": "unrest",
                         }
-                        kcbert_english_emotion = kcbert_mapping.get(kcbert_emotion, "peaceful")
-                        logger.info(f"🔥 KC-BERT 감정 변환: {kcbert_emotion} -> {kcbert_english_emotion}")
-                        
+                        kcbert_english_emotion = kcbert_mapping.get(
+                            kcbert_emotion, "peaceful"
+                        )
+                        logger.info(
+                            f"🔥 KC-BERT 감정 변환: {kcbert_emotion} -> {kcbert_english_emotion}"
+                        )
+
                     else:
                         logger.warning(f"🔥 KC-BERT 감정 분석 실패: {result['error']}")
-                        
+
                 except Exception as e:
                     logger.error(f"🔥 KC-BERT 호출 중 오류: {str(e)}")
 
@@ -856,7 +862,7 @@ class AIService(BaseService):
             llm_emotion = None
             if not kcbert_emotion:  # KC-BERT 실패 시만 LLM 실행
                 logger.info("LLM 감정 분석 시작 (KC-BERT 실패로 인한 fallback)")
-                
+
                 analysis_prompt = f"""
 <task>
 주어진 사용자 입력을 분석하여 감정 분석과 키워드 추출을 수행해주세요.
@@ -926,7 +932,13 @@ class AIService(BaseService):
                                 keywords = analysis_result["keywords"]
 
                                 # 감정 검증
-                                valid_emotions = ["행복", "슬픔", "화남", "평온", "불안"]
+                                valid_emotions = [
+                                    "행복",
+                                    "슬픔",
+                                    "화남",
+                                    "평온",
+                                    "불안",
+                                ]
                                 if emotion not in valid_emotions:
                                     logger.warning(
                                         f"잘못된 감정: {emotion}, 평온으로 기본 설정"
@@ -934,8 +946,12 @@ class AIService(BaseService):
                                     emotion = "평온"
 
                                 # 한국어 감정을 영어로 변환
-                                llm_english_emotion = self._convert_emotion_to_english(emotion)
-                                logger.info(f"감정 변환: {emotion} -> {llm_english_emotion}")
+                                llm_english_emotion = self._convert_emotion_to_english(
+                                    emotion
+                                )
+                                logger.info(
+                                    f"감정 변환: {emotion} -> {llm_english_emotion}"
+                                )
                                 llm_emotion = llm_english_emotion
 
                                 # 키워드 검증 및 정리
@@ -951,7 +967,9 @@ class AIService(BaseService):
                                     keywords = []
 
                                 if not keywords:  # 키워드가 없으면 fallback
-                                    keywords = prompt.split()[:3] if prompt else ["감정"]
+                                    keywords = (
+                                        prompt.split()[:3] if prompt else ["감정"]
+                                    )
 
                                 logger.info(
                                     f"LLM 통합 분석 완료: emotion={emotion}->{llm_english_emotion}, keywords={keywords}"
@@ -988,7 +1006,9 @@ class AIService(BaseService):
                         await asyncio.sleep(retry_delay * (2**attempt))
 
             # LLM으로 키워드 추출 (또는 위에서 추출된 키워드 사용)
-            if 'keywords' not in locals():  # LLM 감정 분석에서 키워드를 추출하지 못한 경우
+            if (
+                "keywords" not in locals()
+            ):  # LLM 감정 분석에서 키워드를 추출하지 못한 경우
                 keywords_prompt = f"""
 사용자 입력: "{prompt}"
 
@@ -1013,7 +1033,7 @@ JSON 형식으로만 답해주세요:
                     logger.info(f"LLM 키워드 추출 원본 응답: {content}")
 
                     import json as json_lib
-                    
+
                     # JSON 블록 추출
                     if "```json" in content:
                         content = content.split("```json")[1].split("```")[0].strip()
@@ -1023,10 +1043,16 @@ JSON 형식으로만 답해주세요:
                         content = content[start:end]
 
                     keyword_result = json_lib.loads(content)
-                    if "keywords" in keyword_result and isinstance(keyword_result["keywords"], list):
-                        keywords = [str(kw).strip() for kw in keyword_result["keywords"] if str(kw).strip()][:5]
+                    if "keywords" in keyword_result and isinstance(
+                        keyword_result["keywords"], list
+                    ):
+                        keywords = [
+                            str(kw).strip()
+                            for kw in keyword_result["keywords"]
+                            if str(kw).strip()
+                        ][:5]
                         logger.info(f"LLM 키워드 추출 성공: {keywords}")
-                        
+
                 except Exception as e:
                     logger.warning(f"LLM 키워드 추출 실패: {str(e)}")
                     # Fallback 키워드
@@ -1044,7 +1070,9 @@ JSON 형식으로만 답해주세요:
                 final_emotion = self._analyze_emotion_from_keywords(prompt)
                 logger.info(f"🔥 최종 감정 (키워드 기반): {final_emotion}")
 
-            logger.info(f"🔥 통합 분석 완료: emotion={final_emotion}, keywords={keywords}")
+            logger.info(
+                f"🔥 통합 분석 완료: emotion={final_emotion}, keywords={keywords}"
+            )
             return {
                 "emotion": final_emotion,
                 "keywords": keywords,
@@ -1055,5 +1083,7 @@ JSON 형식으로만 답해주세요:
             # 완전 fallback
             emotion = self._analyze_emotion_from_keywords(prompt)
             keywords = prompt.split()[:3] if prompt else ["감정"]
-            logger.info(f"🔥 완전 Fallback 분석: emotion={emotion}, keywords={keywords}")
+            logger.info(
+                f"🔥 완전 Fallback 분석: emotion={emotion}, keywords={keywords}"
+            )
             return {"emotion": emotion, "keywords": keywords}
