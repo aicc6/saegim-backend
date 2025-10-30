@@ -63,10 +63,10 @@ pipeline {
             steps {
                 // SCM에서 소스 코드 체크아웃
                 checkout scm
-                
+
                 script {
                     echo "🚀 Saegim 배포 빌드 시작"
-                    
+
                     // Jenkins가 자동으로 감지한 브랜치 정보 출력 + 디버깅
                     echo "📋 BRANCH_NAME: ${env.BRANCH_NAME}"
                     echo "📋 GIT_BRANCH: ${env.GIT_BRANCH}"
@@ -75,10 +75,10 @@ pipeline {
                     echo "📋 파라미터 BRANCH_TO_BUILD: ${params.BRANCH_TO_BUILD}"
                     echo "🔖 커밋: ${env.GIT_COMMIT}"
                     echo "📂 Git Repository: ${env.GIT_REPOSITORY_URL}"
-                    
+
                     // 브랜치 이름 결정 로직 개선 (GitHub Webhook 우선)
                     def currentBranch = ''
-                    
+
                     // 1. GitHub Webhook에서 오는 정보를 최우선으로 확인
                     if (env.GIT_BRANCH) {
                         currentBranch = env.GIT_BRANCH
@@ -102,7 +102,7 @@ pipeline {
                         currentBranch = 'develop'
                         echo "⚠️ 브랜치 감지 실패, 기본값 사용: ${currentBranch}"
                     }
-                    
+
                     // 브랜치 이름 정리 (refs/heads/, origin/ 제거)
                     if (currentBranch?.startsWith('refs/heads/')) {
                         currentBranch = currentBranch.replace('refs/heads/', '')
@@ -110,7 +110,7 @@ pipeline {
                     if (currentBranch?.startsWith('origin/')) {
                         currentBranch = currentBranch.replace('origin/', '')
                     }
-                    
+
                     echo "🔍 최종 브랜치: ${currentBranch}"
                     env.CURRENT_BRANCH = currentBranch
 
@@ -182,39 +182,39 @@ pipeline {
         }
 
         // 3. Docker 이미지 푸시
-        stage('📤 Push Docker Image') {
-            when {
-                environment name: 'DOCKER_BUILD_SUCCESS', value: 'true'
-            }
-            steps {
-                script {
-                    try {
-                        // Docker 레지스트리가 설정되어 있고 로컬이 아닌 경우에만 푸시
-                        if (env.DOCKER_REGISTRY && env.DOCKER_REGISTRY != 'localhost' && env.DOCKER_REGISTRY != 'local') {
-                            docker.withRegistry("https://${DOCKER_REGISTRY}", "${DOCKER_CREDENTIALS}") {
-                                def app = docker.image("${DOCKER_IMAGE}:${BUILD_NUMBER}")
-                                app.push("${BUILD_NUMBER}")
+        // stage('📤 Push Docker Image') {
+        //     when {
+        //         environment name: 'DOCKER_BUILD_SUCCESS', value: 'true'
+        //     }
+        //     steps {
+        //         script {
+        //             try {
+        //                 // Docker 레지스트리가 설정되어 있고 로컬이 아닌 경우에만 푸시
+        //                 if (env.DOCKER_REGISTRY && env.DOCKER_REGISTRY != 'localhost' && env.DOCKER_REGISTRY != 'local') {
+        //                     docker.withRegistry("https://${DOCKER_REGISTRY}", "${DOCKER_CREDENTIALS}") {
+        //                         def app = docker.image("${DOCKER_IMAGE}:${BUILD_NUMBER}")
+        //                         app.push("${BUILD_NUMBER}")
 
-                                // main 브랜치는 latest 태그도 푸시
-                                def currentBranch = env.CURRENT_BRANCH ?: 'develop'
-                                if (currentBranch.contains('main')) {
-                                    app.push("latest")
-                                    echo "✅ latest 태그 푸시 완료"
-                                }
-                            }
-                            echo "✅ Docker 이미지 푸시 성공: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
-                        } else {
-                            echo "ℹ️ 로컬 Docker 이미지 사용, 원격 레지스트리 푸시 스킵"
-                        }
+        //                         // main 브랜치는 latest 태그도 푸시
+        //                         def currentBranch = env.CURRENT_BRANCH ?: 'develop'
+        //                         if (currentBranch.contains('main')) {
+        //                             app.push("latest")
+        //                             echo "✅ latest 태그 푸시 완료"
+        //                         }
+        //                     }
+        //                     echo "✅ Docker 이미지 푸시 성공: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
+        //                 } else {
+        //                     echo "ℹ️ 로컬 Docker 이미지 사용, 원격 레지스트리 푸시 스킵"
+        //                 }
 
-                        env.DOCKER_PUSH_SUCCESS = 'true'
-                        echo "✅ Docker 이미지 푸시 성공: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
-                    } catch (Exception e) {
-                        error "Docker 푸시 실패: ${e.getMessage()}"
-                    }
-                }
-            }
-        }
+        //                 env.DOCKER_PUSH_SUCCESS = 'true'
+        //                 echo "✅ Docker 이미지 푸시 성공: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
+        //             } catch (Exception e) {
+        //                 error "Docker 푸시 실패: ${e.getMessage()}"
+        //             }
+        //         }
+        //     }
+        // }
 
         // 5. Docker 컨테이너 배포
         stage('🚀 Deploy') {
@@ -245,12 +245,12 @@ pipeline {
                         fi
 
                         # 원격 레지스트리에서 이미지 다운로드 (로컬이 아닌 경우)
-                        if [[ "${DOCKER_REGISTRY}" != "localhost" && "${DOCKER_REGISTRY}" != "local" ]]; then
-                            echo "📥 원격 이미지 다운로드: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
-                            docker pull ${DOCKER_IMAGE}:${BUILD_NUMBER}
-                        else
-                            echo "ℹ️ 로컬 Docker 이미지 사용"
-                        fi
+                        #if [[ "${DOCKER_REGISTRY}" != "localhost" && "${DOCKER_REGISTRY}" != "local" ]]; then
+                        #    echo "📥 원격 이미지 다운로드: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
+                        #    docker pull ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                        #else
+                        #    echo "ℹ️ 로컬 Docker 이미지 사용"
+                        #fi
 
                         # 기존 컨테이너 중지 및 삭제
                         docker stop ${containerName} || true
